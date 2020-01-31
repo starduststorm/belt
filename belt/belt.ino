@@ -44,7 +44,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &smoothPalettes;
+Pattern *testIdlePattern = &motion;
 
 /* ---------------------- */
 

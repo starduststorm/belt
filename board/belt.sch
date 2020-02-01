@@ -244,8 +244,6 @@ F 5 "A" H 3250 6450 50  0001 L BNN "Field5"
 	1    3250 6450
 	0    1    1    0   
 $EndComp
-Text Label 6550 950  1    50   ~ 0
-MICROPHONE
 Text Label 4050 3150 3    50   ~ 0
 DATA1
 Text Label 4150 3150 3    50   ~ 0
@@ -353,7 +351,7 @@ F 3 "" H 1300 1750 50  0001 C CNN
 $EndComp
 Text Label 1700 1750 0    50   ~ 0
 BUTTON
-Text Label 4250 3150 3    50   ~ 0
+Text Label 6650 950  1    50   ~ 0
 BUTTON
 $Comp
 L belt-rescue:3352T-1-103LF-3352T-1-103LF P1
@@ -380,7 +378,7 @@ F 3 "" H 1200 1050 50  0001 C CNN
 	1    1200 1050
 	0    1    1    0   
 $EndComp
-Text Label 6650 950  1    50   ~ 0
+Text Label 6050 3150 3    50   ~ 0
 THUMBDIAL
 Text Label 1500 850  0    50   ~ 0
 THUMBDIAL
@@ -523,7 +521,6 @@ NoConn ~ 6650 3150
 NoConn ~ 6550 3150
 NoConn ~ 6250 3150
 NoConn ~ 6150 3150
-NoConn ~ 6050 3150
 NoConn ~ 5950 3150
 NoConn ~ 5850 3150
 NoConn ~ 5750 3150
@@ -876,4 +873,7 @@ Text Label 6450 950  1    50   ~ 0
 MIC_PWR
 Text Label 3600 7150 0    50   ~ 0
 MIC_PWR
+Text Label 6550 950  1    50   ~ 0
+MICROPHONE
+NoConn ~ 4250 3150
 $EndSCHEMATC

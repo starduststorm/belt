@@ -1,3 +1,5 @@
+#define FASTLED_ALLOW_INTERRUPTS 0
+
 #include <FastLED.h>
 
 #define SERIAL_LOGGING 1
@@ -44,7 +46,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &motion;
+Pattern *testIdlePattern = &soundPattern;
 
 /* ---------------------- */
 
@@ -61,7 +63,10 @@ FrameCounter fc;
 #define DATA_PIN_1 1
 #define DATA_PIN_2 0
 
+//#define MIC_PIN 23
+
 int lsb_noise(int pin, int numbits) {
+  // TODO: Use Entropy.h? Probs not needed just to randomize pattern.
   int noise = 0;
   for (int i = 0; i < numbits; ++i) {
     int val = analogRead(pin);
@@ -72,8 +77,9 @@ int lsb_noise(int pin, int numbits) {
 
 void setup() {
   Serial.begin(57600);
+  while (!Serial);
   Serial.println("begin");
-  pinMode(MIC_PIN, INPUT);
+//  pinMode(MIC_PIN, INPUT);
 
   randomSeed(lsb_noise(UNCONNECTED_PIN_1, 8 * sizeof(uint32_t)));
   random16_add_entropy(lsb_noise(UNCONNECTED_PIN_2, 8 * sizeof(uint16_t)));

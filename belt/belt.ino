@@ -1,5 +1,11 @@
 #define FASTLED_ALLOW_INTERRUPTS 0
 
+// FIXME: workaround for build issue in FastLED when FASTLED_ALLOW_INTERRUPTS is 0
+#ifndef MS_COUNTER 
+#define MS_COUNTER systick_millis_count
+#endif
+// end FIXME
+
 #include <FastLED.h>
 
 #define SERIAL_LOGGING 1
@@ -21,6 +27,7 @@
 
 #include "util.h"
 #include "patterns.h"
+#include "AudioManager.h"
 
 /* ---- Options ---- */
 // FIXME: should have options here for mounting, e.g. side-down vs. corner down, which strand is top/bottom, etc.
@@ -36,7 +43,10 @@ Sound soundPattern;
 RaverPlaid raverPlaid;
 Motion motion;
 
-Pattern *idlePatterns[] = {&bitsPattern, &dropletsPattern, &smoothPalettes, &soundPattern, &raverPlaid, &motion};
+Pattern *idlePatterns[] = {
+                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion,
+                            &soundPattern
+                          };
 const unsigned int kIdlePatternsCount = ARRAY_SIZE(idlePatterns);
 
 Pattern *activePattern = NULL;
@@ -60,8 +70,8 @@ FrameCounter fc;
  * Second: 10,12,11,13,6,9,32,8,7
  * Third: 37, 36, 35, 34, 39, 38, 28, 31, 30
  */
-#define DATA_PIN_1 1
-#define DATA_PIN_2 0
+#define DATA_PIN_1 14
+#define DATA_PIN_2 15
 
 //#define MIC_PIN 23
 
@@ -79,8 +89,7 @@ void setup() {
   Serial.begin(57600);
   while (!Serial);
   Serial.println("begin");
-//  pinMode(MIC_PIN, INPUT);
-
+  
   randomSeed(lsb_noise(UNCONNECTED_PIN_1, 8 * sizeof(uint32_t)));
   random16_add_entropy(lsb_noise(UNCONNECTED_PIN_2, 8 * sizeof(uint16_t)));
   

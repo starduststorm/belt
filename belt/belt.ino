@@ -22,7 +22,7 @@
 #define NUM_LEDS (PANEL_LEDS * PANEL_COUNT)
 
 // Pin 23 is the microphone pin, so we may be seeding random with mic noise
-#define UNCONNECTED_PIN_1 15
+#define UNCONNECTED_PIN_1 15 // FIXME: now used for LEDS
 #define UNCONNECTED_PIN_2 23
 
 #include "util.h"

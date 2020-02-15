@@ -11,7 +11,7 @@
 #define SERIAL_LOGGING 1
 #define PANEL_WIDTH 32
 #define PANEL_HEIGHT 8
-#define PANEL_COUNT 1
+#define PANEL_COUNT 2
 
 // FIXME: remove:
 #define STRIP_LENGTH PANEL_HEIGHT

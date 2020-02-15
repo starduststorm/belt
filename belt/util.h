@@ -5,6 +5,8 @@
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
+#define assert(expr, reason) if (!(expr)) { logf("Assertion failed: %s", reason); }
+
 void logf(const char *format, ...)
 {
 #if SERIAL_LOGGING

@@ -10,6 +10,9 @@
 
 #include "util.h"
 #include "palettes.h"
+#include "AudioManager.h"
+
+AudioManager audioManager;
 
 class Pattern {
   protected:
@@ -299,7 +302,64 @@ class Bits : public Pattern {
     }
 };
 
-/* ------------------- */
+/* ------------------------------------------------------------------------------------------------------ */
+
+class Sound: public Pattern {
+  private:
+
+    CRGBPalette16 palette;
+    bool usePalette;
+    float bands[BAND_COUNT];
+
+    void setup() {
+      usePalette = (random(3) > 0);
+      if (usePalette) {
+        palette = gGradientPalettes[random16(gGradientPaletteCount)];
+      }
+      bzero(bands, sizeof(bands));
+      audioManager.subscribe();
+    }
+
+    void stopCompleted() {
+      audioManager.unsubscribe();
+    }
+    
+    void update(CRGBArray<NUM_LEDS> &leds) {
+      const int bandRunningAvgCount = 5;
+      if (audioManager.available()) {
+        leds.fill_solid(CRGB::Black);
+          
+        float *levels = audioManager.getLevels();
+
+        for (int x = 0; x < PANEL_WIDTH; ++x) {
+          float level = levels[x+2];
+      
+          level *= 200;
+
+          bands[x] = (bands[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
+
+          for (int y = 0; y <= bands[x] && y < PANEL_HEIGHT; ++y) {
+            char bright = min(0xFF, (bands[x] - y) * 0xFF);
+            leds[ledrc(x, y)] = CHSV(20 * y, 0xFF, bright);
+          }
+        }
+      }
+
+    EVERY_N_MILLISECONDS(1000) {
+      audioManager.printStatistics();
+    }
+      
+      if (isStopping()) {
+        stopCompleted();
+      }
+    }
+public:
+    const char *description() {
+      return "Sound";
+    }
+};
+
+/* ------------------------------------------------------------------------------------------------------ */
 
 class Motion : public Pattern {
 private:
@@ -406,7 +466,7 @@ public:
   }
 };
 
-/* ------------------- */
+/* ------------------------------------------------------------------------------------------------------ */
 
 class Droplets : public Pattern {
   private:

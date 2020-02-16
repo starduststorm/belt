@@ -6,6 +6,9 @@
 #endif
 // end FIXME
 
+#define DEBUG 1
+#define USE_AUDIO 0
+
 #include <FastLED.h>
 
 #define SERIAL_LOGGING 1
@@ -39,13 +42,18 @@ CRGBArray<NUM_LEDS> leds;
 Droplets dropletsPattern;
 Bits bitsPattern;
 SmoothPalettes smoothPalettes;
+#if USE_AUDIO
 Sound soundPattern;
+#endif
 RaverPlaid raverPlaid;
 Motion motion;
+PixelDust pixelDust;
 
 Pattern *idlePatterns[] = {
-                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion,
+                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust,
+#if USE_AUDIO
                             &soundPattern
+#endif
                           };
 const unsigned int kIdlePatternsCount = ARRAY_SIZE(idlePatterns);
 
@@ -56,7 +64,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &soundPattern;
+Pattern *testIdlePattern = &pixelDust;
 
 /* ---------------------- */
 

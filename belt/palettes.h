@@ -570,3 +570,25 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
 // Count of how many cpt-city gradients are defined:
 const uint8_t gGradientPaletteCount =
   sizeof( gGradientPalettes) / sizeof( TProgmemRGBGradientPalettePtr );
+
+/* --- */
+
+class PaletteManager {
+public:  
+  PaletteManager() {
+  }
+
+  unsigned int colorsInPalette(CRGBPalette16 &palette) {
+    // FIXME: how
+    return 0;
+  }
+  
+  CRGBPalette16 randomPalette() {
+    unsigned choice = random16(gGradientPaletteCount);
+    logf("Picked Palette %u", choice);
+    CRGBPalette16 palette = gGradientPalettes[choice];
+    return palette;
+  }
+};
+
+PaletteManager paletteManager;

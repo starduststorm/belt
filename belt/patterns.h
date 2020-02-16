@@ -6,13 +6,18 @@
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
+#include <Adafruit_PixelDust.h>
 #include <utility/imumaths.h>
 
 #include "util.h"
 #include "palettes.h"
 #include "AudioManager.h"
+#include "MotionManager.h"
 
+#if USE_AUDIO
 AudioManager audioManager;
+#endif
+MotionManager motionManager;
 
 class Pattern {
   protected:
@@ -247,7 +252,7 @@ class Bits : public Pattern {
       if (preset.color == fromPalette) {
         int paletteChoice = random16(ARRAY_SIZE(gGradientPalettes));
         logf("  picked palette %i", paletteChoice);
-        palette = gGradientPalettes[paletteChoice ];
+        palette = gGradientPalettes[paletteChoice];
       }
       
       // for monotone
@@ -304,6 +309,14 @@ class Bits : public Pattern {
 
 /* ------------------------------------------------------------------------------------------------------ */
 
+
+// FIXME: look into just grabbing lots of data and pushing it through map_data_into_colors_through_palette, using data stream from microphone or motion
+
+
+
+
+#if USE_AUDIO
+
 class Sound: public Pattern {
   private:
 
@@ -359,34 +372,24 @@ public:
     }
 };
 
+#endif
+
 /* ------------------------------------------------------------------------------------------------------ */
 
 class Motion : public Pattern {
-private:
-  Adafruit_BNO055 bno;
-public:
-  Motion() {
-    bno = Adafruit_BNO055(55, 0x28);
-    
-    bool hasBNO = bno.begin();
-    logf("Has BNO senror: %s", (hasBNO ? "yes" : "no"));
-    bno.setExtCrystalUse(true);
-  }
-
   bool wantsToIdleStop() {
     return true;
   }
   
   void setup() {
-    bno.enterNormalMode();
+    motionManager.subscribe();
   }
 
   void stopCompleted() {
-    bno.enterSuspendMode();
+    motionManager.unsubscribe();
   }
-  
-  void update(CRGBArray<NUM_LEDS> &leds) {
 
+  void update(CRGBArray<NUM_LEDS> &leds) {
     uint8_t system, gyro, accel, mag;
     system = gyro = accel = mag = 0;
 //    bno.getCalibration(&system, &gyro, &accel, &mag);
@@ -394,9 +397,9 @@ public:
     
     /* Get a new sensor event */ 
     sensors_event_t event; 
-    bno.getEvent(&event);
+    motionManager.getEvent(&event);
     
-//    /* Display the floating point data */
+    logf("X: %0.4f, Y: %0.4f, Z: %0.4f", event.orientation.x, event.orientation.y, event.orientation.z);
 //    Serial.print("X: ");
 //    Serial.print(event.orientation.x, 4);
 //    Serial.print("\tY: ");
@@ -412,13 +415,10 @@ public:
     //  bno.getEvent(&angVelocityData, Adafruit_BNO055::VECTOR_GYROSCOPE);
     //  bno.getEvent(&linearAccelData, Adafruit_BNO055::VECTOR_LINEARACCEL);
     //
-    //  printEvent(&orientationData);
-    //  printEvent(&angVelocityData);
-    //  printEvent(&linearAccelData);
+    //  motionManager.printEvent(&orientationData);
+    //  motionManager.printEvent(&angVelocityData);
+    //  motionManager.printEvent(&linearAccelData);
     //
-    //  int8_t boardTemp = bno.getTemp();
-    //  Serial.print(F("temperature: "));
-    //  Serial.println(boardTemp);
 
     for (int x = 0; x < PANEL_WIDTH * PANEL_COUNT; ++x) {
       for (int y = 0; y < PANEL_HEIGHT; ++y) {
@@ -431,40 +431,97 @@ public:
   const char *description() {
     return "Motion";
   }
+};
 
-  void printEvent(sensors_event_t* event) {
-    Serial.println();
-    Serial.print(event->type);
-    double x = -1000000, y = -1000000 , z = -1000000; //dumb values, easy to spot problem
-    if (event->type == SENSOR_TYPE_ACCELEROMETER) {
-      x = event->acceleration.x;
-      y = event->acceleration.y;
-      z = event->acceleration.z;
-    }
-    else if (event->type == SENSOR_TYPE_ORIENTATION) {
-      x = event->orientation.x;
-      y = event->orientation.y;
-      z = event->orientation.z;
-    }
-    else if (event->type == SENSOR_TYPE_MAGNETIC_FIELD) {
-      x = event->magnetic.x;
-      y = event->magnetic.y;
-      z = event->magnetic.z;
-    }
-    else if ((event->type == SENSOR_TYPE_GYROSCOPE) || (event->type == SENSOR_TYPE_ROTATION_VECTOR)) {
-      x = event->gyro.x;
-      y = event->gyro.y;
-      z = event->gyro.z;
+
+/*
+ *    A palette blend could look cool here but I'd need to handle black pixels
+ *    
+ *     EVERY_N_SECONDS( SECONDS_PER_PALETTE ) {
+        gCurrentPaletteNumber = addmod8( gCurrentPaletteNumber, random8(16), gGradientPaletteCount);
+        gTargetPalette = gGradientPalettes[ gCurrentPaletteNumber ];
+      }
+
+      EVERY_N_MILLISECONDS(40) {
+        nblendPaletteTowardPalette( gCurrentPalette, gTargetPalette, 16);
+      }
+ */
+class PixelDust : public Pattern {
+private:
+  static const unsigned int numParticles = 50;
+  Adafruit_PixelDust *pixelDust;
+  CRGBPalette16 palette;
+  CRGB *dustColors = NULL;
+public:
+  PixelDust() {
+    pixelDust = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 64, false);
+  }
+
+  void setup() {
+    motionManager.subscribe();
+    if(!pixelDust->begin()) {
+      logf("PixelDust init failed");
     }
   
-    Serial.print(": x= ");
-    Serial.print(x);
-    Serial.print(" | y= ");
-    Serial.print(y);
-    Serial.print(" | z= ");
-    Serial.println(z);
+    pixelDust->randomize();
+    logf("picking palette");
+    
+    if (dustColors) {
+      delete [] dustColors;
+    }
+    dustColors = new CRGB[numParticles];
+    resetPalette();
+  }
+
+  void resetPalette() {
+    palette = paletteManager.randomPalette();
+
+    for (int i = 0; i < numParticles; ++i) {
+      CRGB color = CRGB::Black;
+      do {
+        color = ColorFromPalette(palette, random8());
+        dustColors[i] = color;
+      } while (!color);
+    }
+  }
+
+  void stopCompleted() {
+    motionManager.unsubscribe();
+    
+    delete [] dustColors;
+    dustColors = NULL;
+  }
+
+  void update(CRGBArray<NUM_LEDS> &leds) {
+    dimension_t x, y;
+    sensors_event_t accel;
+    sensors_event_t linear_accel;
+    motionManager.bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
+
+    float jerkFactor = 2.0;
+    
+    pixelDust->iterate(accel.acceleration.x + jerkFactor * linear_accel.acceleration.x,
+                      -accel.acceleration.y + jerkFactor * -linear_accel.acceleration.y, 
+                       accel.acceleration.z + jerkFactor * linear_accel.acceleration.z);
+
+    FastLED.clear();
+
+    for (unsigned int i=0; i<numParticles; i++) {
+      pixelDust->getPosition(i, &x, &y);
+      leds[ledrc(x, y)] = dustColors[i];
+    }
+
+    EVERY_N_SECONDS(10) {
+      resetPalette();
+    }
+  }
+
+  const char *description() {
+    return "PixelDust";
   }
 };
+
 
 /* ------------------------------------------------------------------------------------------------------ */
 

@@ -16,6 +16,9 @@ void logf(const char *format, ...)
   vsnprintf(buf, 200, format, argptr);
   va_end(argptr);
   Serial.println(buf);
+#if DEBUG
+  Serial.flush();
+#endif
   free(buf);
 #endif
 }
@@ -32,7 +35,8 @@ inline float fmod_wrap(float x, int m) {
   return result < 0 ? result + m : result;
 }
 
-inline unsigned int ledrc(int x, int y) {
+
+inline unsigned int ledxy(int x, int y) {
   // support zigzag
 #if DEBUG
   if (x < 0 || x >= PANEL_WIDTH * PANEL_COUNT) {
@@ -50,6 +54,11 @@ inline unsigned int ledrc(int x, int y) {
     index= x * STRIP_LENGTH + y;
   }
   return index;
+}
+
+inline unsigned int ledrc(int r, int c) {
+  // FIXME: remove, name was awful
+  return ledxy(r, c);
 }
 
 class FrameCounter {
@@ -96,7 +105,5 @@ float remap(float x, float oldmin, float oldmax, float newmin, float newmax) {
   float zero_to_one = (x-oldmin) / (oldmax-oldmin);
   return zero_to_one*(newmax-newmin) + newmin;
 }
-
-
 
 #endif

@@ -1,6 +1,5 @@
 
-// TODO: make into a non-Pattern manager class that patterns can subscribe to
-
+#if USE_AUDIO
 
 #ifndef AUDIO_MANAGER_H
 #define AUDIO_MANAGER_H
@@ -90,7 +89,7 @@ public:
   }
   
   void unsubscribe() {
-    
+    // FIXME: need a way to disable or pause fft, but may need to patch the audio library
   }
 
   bool available() {
@@ -142,5 +141,7 @@ public:
     Serial.println();
   }
 };
+
+#endif
 
 #endif

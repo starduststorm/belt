@@ -582,6 +582,10 @@ public:
     // FIXME: how
     return 0;
   }
+
+  CRGBPalette16 getPalette(int choice) {
+    return gGradientPalettes[choice];
+  }
   
   CRGBPalette16 randomPalette() {
     unsigned choice = random16(gGradientPaletteCount);

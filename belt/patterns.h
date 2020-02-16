@@ -454,7 +454,7 @@ private:
   CRGB *dustColors = NULL;
 public:
   PixelDust() {
-    pixelDust = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 64, false);
+    pixelDust = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 101, false);
   }
 
   void setup() {
@@ -501,9 +501,10 @@ public:
 
     float jerkFactor = 2.0;
     
-    pixelDust->iterate(accel.acceleration.x + jerkFactor * linear_accel.acceleration.x,
-                      -accel.acceleration.y + jerkFactor * -linear_accel.acceleration.y, 
-                       accel.acceleration.z + jerkFactor * linear_accel.acceleration.z);
+    pixelDust->iterate(
+                  1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x),
+                 -1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y), 
+                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z));
 
     FastLED.clear();
 

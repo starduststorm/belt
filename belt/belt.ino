@@ -83,6 +83,8 @@ FrameCounter fc;
 
 //#define MIC_PIN 23
 
+void applyBrightnessSettings();
+
 int lsb_noise(int pin, int numbits) {
   // TODO: Use Entropy.h? Probs not needed just to randomize pattern.
   int noise = 0;
@@ -94,14 +96,18 @@ int lsb_noise(int pin, int numbits) {
 }
 
 void setup() {
+  long setupStart = millis();
   Serial.begin(57600);
+#if DEBUG
   while (!Serial);
-  Serial.println("begin");
+#endif
+  long serialReady = millis();
+  logf("begin - waited %0.2fs for Serial", (serialReady - setupStart) / 1000.);
   
   randomSeed(lsb_noise(UNCONNECTED_PIN_1, 8 * sizeof(uint32_t)));
   random16_add_entropy(lsb_noise(UNCONNECTED_PIN_2, 8 * sizeof(uint16_t)));
   
-  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS).setCorrection(TypicalSMD5050);
+  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS).setCorrection(TypicalSMD5050); // TODO: compare with UncorrectedColor
   LEDS.setBrightness(255);
 
   fc.tick();
@@ -144,10 +150,23 @@ void loop() {
       activePattern = nextPattern;
     }
   }
-
+  
+  applyBrightnessSettings();
+  
   FastLED.show();
   
   fc.tick();
   fc.clampToFramerate(60);
+}
 
+void applyBrightnessSettings() {
+    static long firstLoopMillis = 0;
+  const long fadeInTime = 2000;
+  if (firstLoopMillis == 0) {
+    firstLoopMillis = millis();
+  }
+  long earlyRunTime = firstLoopMillis + fadeInTime - millis();
+  if (earlyRunTime > 0) {
+    leds.fadeLightBy(0xFF * earlyRunTime / (float)fadeInTime);
+  }
 }

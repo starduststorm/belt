@@ -64,7 +64,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &pixelDust;
+Pattern *testIdlePattern = &motion;
 
 /* ---------------------- */
 
@@ -106,8 +106,11 @@ void setup() {
   
   randomSeed(lsb_noise(UNCONNECTED_PIN_1, 8 * sizeof(uint32_t)));
   random16_add_entropy(lsb_noise(UNCONNECTED_PIN_2, 8 * sizeof(uint16_t)));
-  
-  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS).setCorrection(TypicalSMD5050); // TODO: compare with UncorrectedColor
+
+  // FIXME: TypicalSMD5050 color correction produces reds at very low brightness levels, such that fading a white pixel down to black produces red at the end.
+  // This is very undesirable, so I'd rather use uncorrected colors .setCorrection((UncorrectedColor).
+  //.setCorrection(TypicalSMD5050);
+  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
   LEDS.setBrightness(255);
 
   fc.tick();

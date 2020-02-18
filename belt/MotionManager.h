@@ -47,6 +47,11 @@ public:
   }
 
   void printStatus() {
+    uint8_t system, gyro, accel, mag;
+    system = gyro = accel = mag = 0;
+    bno.getCalibration(&system, &gyro, &accel, &mag);
+    logf("calibration level: %i", system);
+
     logf("Manager usage count: %u", retainCount);
     int8_t boardTemp = bno.getTemp();
     Serial.print(F("temperature: "));

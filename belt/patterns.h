@@ -13,6 +13,7 @@
 #include "palettes.h"
 #include "AudioManager.h"
 #include "MotionManager.h"
+#include "drawing.h"
 
 #if USE_AUDIO
 AudioManager audioManager;
@@ -377,6 +378,61 @@ public:
 /* ------------------------------------------------------------------------------------------------------ */
 
 class Motion : public Pattern {
+  int prevOrientation;
+  float rotationVelocity = 0;
+  const float rotationSamples = 5;
+  
+  void setup() {
+    motionManager.subscribe();
+  }
+
+  void stopCompleted() {
+    motionManager.unsubscribe();
+  }
+
+  void update(CRGBArray<NUM_LEDS> &leds) {
+    Drawing drawing(leds, PANEL_WIDTH, PANEL_HEIGHT);
+    drawing.blendMode(brighten);
+    leds.fadeToBlackBy(20);
+//    FastLED.clear();
+    
+    sensors_event_t event; 
+    motionManager.getEvent(&event);
+    
+//    logf("orientation = (%f, %f, %f)", event.orientation.x, event.orientation.y, event.orientation.z);
+
+    int orientation = event.orientation.z;
+    rotationVelocity = (rotationSamples * rotationVelocity + prevOrientation - orientation) / (rotationSamples + 1);
+    
+    int x = map(orientation, -180, 180, 0, PANEL_WIDTH-1);
+    int y = 3;//map(event.orientation.x, 0, 360, 0, PANEL_HEIGHT-1);
+
+    float rotationSpeed = fabs(rotationVelocity);
+//    logf("rotationSpeed = %0.1f", rotationSpeed);
+    if (true || rotationSpeed > 3) {
+      int brightness = min(0xFF, 100 * (rotationSpeed - 4));
+      logf("using brightness %i", brightness);
+      if (brightness > 0) {
+        CHSV color = CHSV(0, 0, brightness);
+        drawing.circle(x, y, 1, 12, true, color);
+        leds[ledxy(x,y+1)] = color;
+      }
+    }
+    prevOrientation = orientation;
+  }
+  
+  bool wantsToIdleStop() {
+    return true;
+  }
+
+  const char *description() {
+    return "Motion";
+  }
+};
+
+/* ------------------------------------------------------------------------------------------------------ */
+
+class RainbowMotion : public Pattern {
   bool wantsToIdleStop() {
     return true;
   }
@@ -390,12 +446,6 @@ class Motion : public Pattern {
   }
 
   void update(CRGBArray<NUM_LEDS> &leds) {
-    uint8_t system, gyro, accel, mag;
-    system = gyro = accel = mag = 0;
-//    bno.getCalibration(&system, &gyro, &accel, &mag);
-//    logf("calibration level: %i", system);
-    
-    /* Get a new sensor event */ 
     sensors_event_t event; 
     motionManager.getEvent(&event);
     
@@ -429,7 +479,7 @@ class Motion : public Pattern {
   }
   
   const char *description() {
-    return "Motion";
+    return "RainbowMotion";
   }
 };
 

@@ -70,10 +70,12 @@ class Pattern {
       }
     }
 
-    void loop(CRGBArray<NUM_LEDS> &leds) {
-      update(leds);
+    void loop(DrawingContext &ctx) {
+      update(ctx.leds);
+      update(ctx);
       if (subPattern) {
-        subPattern->update(leds);
+        subPattern->update(ctx.leds);
+        subPattern->update(ctx);
       }
     }
 
@@ -116,7 +118,10 @@ class Pattern {
       return stopTime != -1;
     }
 
-    virtual void update(CRGBArray<NUM_LEDS> &leds) = 0;
+    // One of the two of these must be implemented. Both will be called.
+    virtual void update(CRGBArray<NUM_LEDS> &leds) { }
+    virtual void update(DrawingContext &ctx) { }
+    
     virtual const char *description() = 0;
 
     // Sub patterns (for pattern mixing)
@@ -378,47 +383,111 @@ public:
 /* ------------------------------------------------------------------------------------------------------ */
 
 class Motion : public Pattern {
+  float kMotionThreshold = 2.0;
+private:
+  class MotionBlob {
+    int y;
+    int x;
+    float xfact;
+  public:
+    CRGB color;
+    void reset(int x, int y, CRGB color) {
+      this->x = x;
+      this->y = y;
+      this->color = color;
+      xfact = random8() / 255. + 0.5;
+    }
+    
+    void update(DrawingContext &ctx, float theta, float dtheta) {
+      // TODO: this needs to be tuned to compensate for the total angle the leds will occupy in the circle
+      int x_offset = xfact * map(theta, -180, 180, 0, TOTAL_WIDTH);
+      
+      int brightness = min(0xFF, 100 * (dtheta - 1));
+      CRGB dimmedColor = color;
+      dimmedColor.nscale8_video(brightness);
+
+      int px =  (x + x_offset) % ctx.width;
+      int px2 = (x + x_offset + 1) % ctx.width;
+
+      ctx.point(px,  y,   dimmedColor);
+      ctx.point(px2, y,   dimmedColor);
+      ctx.point(px,  y+1, dimmedColor);
+      ctx.point(px2, y+1, dimmedColor);
+    }
+  };
+  
+public:
+  const int kBlobCount = 16;
+  const int kBlobsResetTimeout = 5000;
   int prevOrientation;
   float rotationVelocity = 0;
   const float rotationSamples = 5;
+  MotionBlob *blobs;
+  CRGBPalette16 palette;
+  long lastDisplay = -kBlobsResetTimeout;
+
+  void resetBlobs(DrawingContext &ctx) {
+    // space out the blobs so they don't overlap
+    const int ybuckets = 2;
+    const int xbuckets = kBlobCount / ybuckets;
+
+    const int xbucketSize = ctx.width / xbuckets;
+    const int ybucketSize = ctx.height / ybuckets;
+    
+    palette = paletteManager.randomPalette();
+    for (int i = 0; i < kBlobCount; ++i) {
+      int xbucketStart = (i * xbucketSize) % ctx.width;
+      int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);
+      
+      int x = xbucketStart + random8(xbucketSize);
+      int y = ybucketStart + random8(ybucketSize - 1);
+      CRGB color = ColorFromPalette(palette, random8());
+      
+      blobs[i].reset(x, y, color);
+    }
+  }
   
   void setup() {
     motionManager.subscribe();
+    assert(blobs == NULL, "MotionBlobs array not nulled");
+    blobs = new MotionBlob[kBlobCount];
   }
 
   void stopCompleted() {
     motionManager.unsubscribe();
+    delete [] blobs;
+    blobs = NULL;
   }
 
-  void update(CRGBArray<NUM_LEDS> &leds) {
-    Drawing drawing(leds, PANEL_WIDTH, PANEL_HEIGHT);
-    drawing.blendMode(brighten);
-    leds.fadeToBlackBy(20);
-//    FastLED.clear();
+  void update(DrawingContext &ctx) {
+    ctx.leds.fadeToBlackBy(25);
+
+    if (lastDisplay != -1 && millis() - lastDisplay > 5000) {
+      resetBlobs(ctx);
+      lastDisplay = -1;
+    }
     
     sensors_event_t event; 
     motionManager.getEvent(&event);
     
 //    logf("orientation = (%f, %f, %f)", event.orientation.x, event.orientation.y, event.orientation.z);
 
-    int orientation = event.orientation.z;
+    float orientation = event.orientation.z;
     rotationVelocity = (rotationSamples * rotationVelocity + prevOrientation - orientation) / (rotationSamples + 1);
-    
-    int x = map(orientation, -180, 180, 0, PANEL_WIDTH-1);
-    int y = 3;//map(event.orientation.x, 0, 360, 0, PANEL_HEIGHT-1);
+    prevOrientation = orientation;
 
     float rotationSpeed = fabs(rotationVelocity);
-//    logf("rotationSpeed = %0.1f", rotationSpeed);
-    if (true || rotationSpeed > 3) {
-      int brightness = min(0xFF, 100 * (rotationSpeed - 4));
-      logf("using brightness %i", brightness);
-      if (brightness > 0) {
-        CHSV color = CHSV(0, 0, brightness);
-        drawing.circle(x, y, 1, 12, true, color);
-        leds[ledxy(x,y+1)] = color;
+
+    if (rotationSpeed > kMotionThreshold) {
+      ctx.pushStyle();
+      ctx.blendMode(brighten);
+      for (int i = 0; i < kBlobCount; ++i) {
+        MotionBlob *blob = &blobs[i];
+        blob->update(ctx, orientation, rotationSpeed);
       }
+      ctx.popStyle();
+      lastDisplay = millis();
     }
-    prevOrientation = orientation;
   }
   
   bool wantsToIdleStop() {
@@ -526,7 +595,7 @@ public:
   void resetPalette() {
     palette = paletteManager.randomPalette();
 
-    for (int i = 0; i < numParticles; ++i) {
+    for (unsigned i = 0; i < numParticles; ++i) {
       CRGB color = CRGB::Black;
       do {
         color = ColorFromPalette(palette, random8());

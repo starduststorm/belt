@@ -1,6 +1,14 @@
 
 #include <stack>
 
+// FIXME: Workaround for linker issues when using copy-constructors for DrawStyle struct (since something is built with -fno-exceptions)
+// https://forum.pjrc.com/threads/57192-Teensy-4-0-linker-issues-with-STL-libraries
+extern "C"{
+  int __exidx_start(){ return -1;}
+  int __exidx_end(){ return -1; }
+}
+//
+
 enum BlendMode {
   sourceOver, brighten, darken, /* add blending? but how to encode alpha? as a DrawStyle? */
 };
@@ -10,22 +18,22 @@ public:
   BlendMode blendMode = sourceOver;
 };
 
-class Drawing {
+class DrawingContext {
 private:
   std::stack<DrawStyle> styleStack;
   DrawStyle drawStyle;
 public:
   int width, height;
-  CRGBArray<NUM_LEDS> *leds;
-  Drawing(CRGBArray<NUM_LEDS> &leds, unsigned width, unsigned height) {
+  CRGBArray<NUM_LEDS> &leds;
+  DrawingContext(CRGBArray<NUM_LEDS> &leds, unsigned width, unsigned height) : leds(leds) {
     this->width = width;
     this->height = height;
-    this->leds = &leds;
   }
   
   void blendMode(BlendMode mode) {
     drawStyle.blendMode = mode;
   }
+  
   void pushStyle() {
     styleStack.push(drawStyle);
     drawStyle = DrawStyle();
@@ -47,15 +55,15 @@ public:
     assert(y >=0 && y < height, "point: y out of bounds");
     int index = ledxy(x,y);
     switch (drawStyle.blendMode) {
-      case sourceOver: (*leds)[index] = src; break;
+      case sourceOver: leds[index] = src; break;
       case brighten: {
-        CRGB dst = (*leds)[index];
-        (*leds)[index] = CRGB(max(src.r, dst.r), max(src.g, dst.g), max(src.b, dst.b));
+        CRGB dst = leds[index];
+        leds[index] = CRGB(max(src.r, dst.r), max(src.g, dst.g), max(src.b, dst.b));
         break;
       }
       case darken: {
-        CRGB dst = (*leds)[index];
-        (*leds)[index] = CRGB(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b));
+        CRGB dst = leds[index];
+        leds[index] = CRGB(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b));
       }
     }
   }
@@ -79,7 +87,6 @@ public:
       }
     } else {
       if (x1 > x2) {
-        logf("do swap");
         std::swap(y1, y2);
         std::swap(x1, x2);
       }
@@ -100,7 +107,7 @@ public:
       }
     }
     if (fill) {
-      // TODO: lol horribly inefficient
+      // TODO: lol horribly inefficient. this should use lines.
       if (radius > 0.5) {
         circle(centerX, centerY, radius-0.5, max(ndiv-1,4), fill, src);
       }

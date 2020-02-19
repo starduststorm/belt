@@ -15,6 +15,8 @@
 #define PANEL_WIDTH 32
 #define PANEL_HEIGHT 8
 #define PANEL_COUNT 2
+#define TOTAL_WIDTH PANEL_COUNT * PANEL_WIDTH
+#define TOTAL_HEIGHT PANEL_HEIGHT
 
 // FIXME: remove:
 #define STRIP_LENGTH PANEL_HEIGHT
@@ -38,6 +40,7 @@
 /* ---- ------------*/
 
 CRGBArray<NUM_LEDS> leds;
+DrawingContext *drawingContext;
 
 Droplets dropletsPattern;
 Bits bitsPattern;
@@ -113,6 +116,8 @@ void setup() {
   FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
   LEDS.setBrightness(255);
 
+  drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
+
   fc.tick();
 }
 
@@ -120,7 +125,7 @@ void loop() {
   for (unsigned i = 0; i < kIdlePatternsCount; ++i) {
     Pattern *pattern = idlePatterns[i];
     if (pattern->isRunning() || pattern->isStopping()) {
-      pattern->loop(leds);
+      pattern->loop(*drawingContext);
     }
   }
 
@@ -159,7 +164,7 @@ void loop() {
   FastLED.show();
   
   fc.tick();
-  fc.clampToFramerate(60);
+  fc.clampToFramerate(90);
 }
 
 void applyBrightnessSettings() {

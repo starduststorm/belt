@@ -16,13 +16,14 @@ enum BlendMode {
 struct DrawStyle {
 public:
   BlendMode blendMode = sourceOver;
+  bool wrap = false;
 };
 
 class DrawingContext {
 private:
   std::stack<DrawStyle> styleStack;
-  DrawStyle drawStyle;
 public:
+  DrawStyle drawStyle;
   int width, height;
   CRGBArray<NUM_LEDS> &leds;
   DrawingContext(CRGBArray<NUM_LEDS> &leds, unsigned width, unsigned height) : leds(leds) {
@@ -46,13 +47,18 @@ public:
   }
   
   void point(int x, int y, CRGB src) {
-    if (x < 0 || x >= width || y < 0 || y >= height) {
-      logf("point: (%i, %i) out of bounds", x, y);
-      // FIXME: is this more useful than asserting? or just assert during debug?
-      return;
+    if (drawStyle.wrap) {
+      x = mod_wrap(x, width);
+      y = mod_wrap(y, width);
+    } else {
+      if (x < 0 || x >= width || y < 0 || y >= height) {
+        logf("point: (%i, %i) out of bounds", x, y);
+        // FIXME: is this more useful than asserting? or just assert during debug?
+        return;
+      }
+      assert(x >=0 && x < width, "point: x out of bounds");
+      assert(y >=0 && y < height, "point: y out of bounds");
     }
-    assert(x >=0 && x < width, "point: x out of bounds");
-    assert(y >=0 && y < height, "point: y out of bounds");
     int index = ledxy(x,y);
     switch (drawStyle.blendMode) {
       case sourceOver: leds[index] = src; break;
@@ -69,6 +75,7 @@ public:
   }
   
   void line(float x1, float y1, float x2, float y2, CRGB src) {
+    // TODO: anti-alias when floats are passed. make this the integer version.
     bool useY = (x1 == x2 || fabsf((y2 - y1) / (float)(x2 - x1)) > 1);
     if (useY) {
       if (y1 == y2) {

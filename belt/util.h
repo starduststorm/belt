@@ -6,7 +6,7 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
 #if DEBUG
-#define assert(expr, reason) if (!(expr)) { logf("Assertion failed: %s", reason); }
+#define assert(expr, reason) if (!(expr)) { logf("Assertion failed: %s", reason); while (1) delay(100); }
 #else
 #define assert(expr, reason)
 #endif
@@ -45,10 +45,10 @@ inline unsigned int ledxy(int x, int y) {
 #if DEBUG
   if (x < 0 || x >= PANEL_WIDTH * PANEL_COUNT) {
     logf("ledrc: OUT OF BOUNDS AT %i,%i", x,y);
-    while(1);
+    while(1) delay(100);
   } else if (y < 0 || y >= PANEL_HEIGHT) {
     logf("ledrc: OUT OF BOUNDS AT %i,%i", x,y);
-    while(1);
+    while(1) delay(100);
   }
 #endif
   unsigned int index = 0;

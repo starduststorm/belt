@@ -24,6 +24,7 @@ class Pattern {
   protected:
     long startTime = -1;
     long stopTime = -1;
+    long lastUpdateTime = -1;
     Pattern *subPattern = NULL;
 
     virtual void stopCompleted() {
@@ -56,17 +57,18 @@ class Pattern {
       return true;
     }
 
-    void start() {
+    void start(DrawingContext &ctx) {
       if (isStopping()) {
         stopCompleted();
       }
       logf("Starting %s", description());
       startTime = millis();
       stopTime = -1;
+      setup(ctx);
       setup();
       subPattern = makeSubPattern();
       if (subPattern) {
-        subPattern->start();
+        subPattern->start(ctx);
       }
     }
 
@@ -77,8 +79,11 @@ class Pattern {
         subPattern->update(ctx.leds);
         subPattern->update(ctx);
       }
+      lastUpdateTime = millis();
     }
 
+    // Both of these are called
+    virtual void setup(DrawingContext &ctx) { }
     virtual void setup() { }
 
     virtual bool wantsToIdleStop() {
@@ -114,6 +119,10 @@ class Pattern {
       return startTime == -1 ? 0 : millis() - startTime;
     }
 
+    long frameTime() {
+      return (lastUpdateTime == -1 ? 0 : millis() - lastUpdateTime);
+    }
+
     bool isStopping() {
       return stopTime != -1;
     }
@@ -123,14 +132,6 @@ class Pattern {
     virtual void update(DrawingContext &ctx) { }
     
     virtual const char *description() = 0;
-
-    // Sub patterns (for pattern mixing)
-    void setSubPattern(Pattern *pattern) {
-      subPattern = pattern;
-      if (isRunning()) {
-        subPattern->start();
-      }
-    }
 };
 
 
@@ -400,7 +401,7 @@ private:
     
     void update(DrawingContext &ctx, float theta, float dtheta) {
       // TODO: this needs to be tuned to compensate for the total angle the leds will occupy in the circle
-      int x_offset = xfact * map(theta, -180, 180, 0, TOTAL_WIDTH);
+      int x_offset = xfact * map(theta, -180, 180, 0, ctx.width);
       
       int brightness = min(0xFF, 100 * (dtheta - 1));
       CRGB dimmedColor = color;
@@ -496,6 +497,100 @@ public:
 
   const char *description() {
     return "Motion";
+  }
+};
+
+/* ------------------------------------------------------------------------------------------------------ */
+
+
+// idea: a pattern that can handle motion, sound, or be idle
+// this is the idle version. could feed audio into it to make the bars pulse in brightness, or feed motion to make them move
+
+class Bars : public Pattern {
+  const int kSecondsPerPalette = 10;
+  const int kBarWidth = 8;
+   int numBars = 0;
+  
+  int *colorIndexes = NULL;
+  float *xvelocities = NULL;
+  float *xoffsets = NULL;
+  
+  CRGBPalette16 currentPalette;
+  CRGBPalette16 targetPalette;
+  
+  void setup(DrawingContext &ctx) {
+    currentPalette = paletteManager.randomPalette();
+    targetPalette = paletteManager.randomPalette();
+    
+    assert(colorIndexes == NULL, "Color indexes array not nulled");
+    numBars = ctx.width / kBarWidth / 2 * ctx.height;
+    colorIndexes = new int[numBars];
+    xvelocities = new float[ctx.height];
+    xoffsets= new float[ctx.height];
+
+    for (unsigned i = 0; i < numBars; ++i) {
+      colorIndexes[i] = random8();
+    }
+
+    for (int i = 0 ; i < ctx.height; ++i) {
+      xvelocities[i] = random8() / (255.0 * 2) + 0.75;
+      xoffsets[i] = random8(8);
+    }
+  }
+
+  void stopCompleted() {
+    delete [] colorIndexes;
+    colorIndexes = NULL;
+    delete [] xvelocities;
+    xvelocities = NULL;
+    delete [] xoffsets;
+    xoffsets = NULL;
+  }
+  
+  void update(DrawingContext &ctx) {
+    FastLED.clear();
+    
+    EVERY_N_SECONDS(kSecondsPerPalette) {
+      targetPalette = paletteManager.randomPalette();
+    }
+    
+    EVERY_N_MILLISECONDS(40) {
+      nblendPaletteTowardPalette(currentPalette, targetPalette, 16);
+    }
+   
+    EVERY_N_MILLISECONDS(20) {
+      for (unsigned i = 0; i < numBars; ++i) {
+        colorIndexes[i] = addmod8(colorIndexes[i], 1, 0xFF);
+      }
+    }
+    
+    ctx.pushStyle();
+    ctx.drawStyle.wrap = true;
+    
+    for (int y = 0; y < ctx.height; ++y) {
+      for (int x = 0; x < ctx.width / kBarWidth; ++x) {
+        if (addmod8(x, y, 2) == 0) {
+          continue;
+        }
+        int row_startx = (y & 1 ? xoffsets[y]: -xoffsets[y]);
+        
+        int x1 = row_startx + x*kBarWidth;
+        int x2 = row_startx + (x+1)*kBarWidth - 1;
+
+        CRGB color = ColorFromPalette(currentPalette, colorIndexes[y * ctx.width / kBarWidth / 2 + x / 2]);
+        ctx.line(x1, y, x2, y, color);
+      }
+      xoffsets[y] += xvelocities[y] * frameTime() / 30.0;
+      if (xoffsets[y] > ctx.width) {
+        xoffsets[y] -= ctx.width;
+      }
+    }
+
+    ctx.popStyle();
+  }
+  
+  const char *description() {
+    return "Bars";
   }
 };
 

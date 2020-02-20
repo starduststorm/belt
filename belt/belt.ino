@@ -45,6 +45,7 @@ DrawingContext *drawingContext;
 Droplets dropletsPattern;
 Bits bitsPattern;
 SmoothPalettes smoothPalettes;
+Bars barsPattern;
 #if USE_AUDIO
 Sound soundPattern;
 #endif
@@ -53,7 +54,7 @@ Motion motion;
 PixelDust pixelDust;
 
 Pattern *idlePatterns[] = {
-                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust,
+                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust, &barsPattern
 #if USE_AUDIO
                             &soundPattern
 #endif
@@ -67,7 +68,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &motion;
+Pattern *testIdlePattern = &barsPattern;
 
 /* ---------------------- */
 
@@ -114,7 +115,7 @@ void setup() {
   // This is very undesirable, so I'd rather use uncorrected colors .setCorrection((UncorrectedColor).
   //.setCorrection(TypicalSMD5050);
   FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
-  LEDS.setBrightness(255);
+  LEDS.setBrightness(127);
 
   drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
 
@@ -154,7 +155,7 @@ void loop() {
       nextPattern = idlePatterns[choice];
     }
     if ((nextPattern != lastPattern || nextPattern == testIdlePattern || kIdlePatternsCount == 1) && !nextPattern->isRunning() && nextPattern->wantsToRun()) {
-      nextPattern->start();
+      nextPattern->start(*drawingContext);
       activePattern = nextPattern;
     }
   }

@@ -326,7 +326,7 @@ class Bits : public Pattern {
 
 class Sound: public Pattern {
   private:
-
+    int framesWithoutAudioData = 0;
     CRGBPalette16 palette;
     bool usePalette;
     float bands[BAND_COUNT];
@@ -347,6 +347,10 @@ class Sound: public Pattern {
     void update(CRGBArray<NUM_LEDS> &leds) {
       const int bandRunningAvgCount = 5;
       if (audioManager.available()) {
+        if (framesWithoutAudioData > 0) {
+          logf("Went %i frames without audio data", framesWithoutAudioData);
+          framesWithoutAudioData = 0;
+        }
         leds.fill_solid(CRGB::Black);
           
         float *levels = audioManager.getLevels();
@@ -358,11 +362,17 @@ class Sound: public Pattern {
 
           bands[x] = (bands[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
 
-          for (int y = 0; y <= bands[x] && y < PANEL_HEIGHT; ++y) {
-            char bright = min(0xFF, (bands[x] - y) * 0xFF);
-            leds[ledrc(x, y)] = CHSV(20 * y, 0xFF, bright);
+          // Just draw the same thing to both panels for now
+          for (int p = 0; p < PANEL_COUNT; ++p) {
+            for (int y = 0; y <= bands[x] && y < PANEL_HEIGHT; ++y) {
+              char bright = min(0xFF, (bands[x] - y) * 0xFF);
+              leds[ledrc(x + p * PANEL_WIDTH, y)] = CHSV(20 * y, 0xFF, bright);
+            }
           }
         }
+      } else {
+        framesWithoutAudioData++;
+        // FIXME: if no data available, assume levels same as last frame and still draw in order to keep animations smooth
       }
 
     EVERY_N_MILLISECONDS(1000) {
@@ -509,7 +519,7 @@ public:
 class Bars : public Pattern {
   const int kSecondsPerPalette = 10;
   const int kBarWidth = 8;
-   int numBars = 0;
+   unsigned numBars = 0;
   
   int *colorIndexes = NULL;
   float *xvelocities = NULL;
@@ -596,6 +606,35 @@ class Bars : public Pattern {
 
 /* ------------------------------------------------------------------------------------------------------ */
 
+class Oscillators : public Pattern {
+  void update(DrawingContext &ctx) {
+    for (int index = 0; index < ctx.width * ctx.height; ++index) {
+      
+      // this looks cool for a good long time
+//      int r = 0;//beatsin16(millis() / 15 + 5 * index) >> 8;
+//      int g = beatsin16(millis() / 10 + 10 * index) >> 8;
+//      int b = 0;//beatsin16(millis() / 5 + 15 * index) >> 8;
+//      EVERY_N_MILLISECONDS(10) {
+//        logf("b1 = %i, b2 = %i", b1, b2);
+//      }
+//CRGB color = CRGB(dim8_raw(r), dim8_raw(g), dim8_raw(b));
+//      ctx.leds[index] = color;
+    }
+
+    for (int x = 0; x < ctx.width; ++x) {
+      for (int y = 0; y < ctx.height; ++y) {
+        CHSV color = CHSV(100, 0xFF, sin8(millis()/2. + x*40 + beatsin8(30)*y));// + beatsin8(30, 20, 0xFF - 20*7));
+        ctx.point(x, y, color);
+      }
+    }
+  }
+  const char *description() {
+    return "Oscillators";
+  }
+};
+
+/* ------------------------------------------------------------------------------------------------------ */
+
 class RainbowMotion : public Pattern {
   bool wantsToIdleStop() {
     return true;
@@ -663,21 +702,25 @@ class RainbowMotion : public Pattern {
 class PixelDust : public Pattern {
 private:
   static const unsigned int numParticles = 50;
-  Adafruit_PixelDust *pixelDust;
+  Adafruit_PixelDust *pixelDust[PANEL_COUNT];
   CRGBPalette16 palette;
   CRGB *dustColors = NULL;
 public:
   PixelDust() {
-    pixelDust = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 101, false);
+    for (int i = 0; i < PANEL_COUNT; ++i) {
+      pixelDust[i] = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 101, false);
+    }
   }
 
   void setup() {
     motionManager.subscribe();
-    if(!pixelDust->begin()) {
-      logf("PixelDust init failed");
+    for (int i = 0; i < PANEL_COUNT; ++i) {
+      if(!pixelDust[i]->begin()) {
+        logf("PixelDust init failed");
+      }
+      pixelDust[i]->randomize();
     }
   
-    pixelDust->randomize();
     logf("picking palette");
     
     if (dustColors) {
@@ -714,17 +757,22 @@ public:
     motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
 
     float jerkFactor = 2.0;
-    
-    pixelDust->iterate(
-                  1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x),
-                 -1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y), 
-                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z));
 
-    FastLED.clear();
+    for (int i = 0; i < PANEL_COUNT; ++i) {
+      pixelDust[i]->iterate(
+                    1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x),
+                   -1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y), 
+                    1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z));
+    }
 
-    for (unsigned int i=0; i<numParticles; i++) {
-      pixelDust->getPosition(i, &x, &y);
-      leds[ledrc(x, y)] = dustColors[i];
+//    FastLED.clear();
+    leds.fill_solid(CRGB::Black);
+
+    for (int i = 0; i < PANEL_COUNT; ++i) {
+      for (unsigned int p = 0; p < numParticles; p++) {
+        pixelDust[i]->getPosition(p, &x, &y);
+        leds[ledrc(x + i * PANEL_WIDTH, y)] = dustColors[p];
+      }
     }
 
     EVERY_N_SECONDS(10) {

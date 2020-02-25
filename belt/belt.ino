@@ -6,7 +6,8 @@
 #endif
 // end FIXME
 
-#define DEBUG 1
+#define DEBUG 0
+#define WAIT_FOR_SERIAL 0
 #define USE_AUDIO 0
 
 #include <FastLED.h>
@@ -46,6 +47,7 @@ Droplets dropletsPattern;
 Bits bitsPattern;
 SmoothPalettes smoothPalettes;
 Bars barsPattern;
+Oscillators oscillatorsPattern;
 #if USE_AUDIO
 Sound soundPattern;
 #endif
@@ -54,7 +56,7 @@ Motion motion;
 PixelDust pixelDust;
 
 Pattern *idlePatterns[] = {
-                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust, &barsPattern
+                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust, &barsPattern, &oscillatorsPattern,
 #if USE_AUDIO
                             &soundPattern
 #endif
@@ -68,7 +70,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &barsPattern;
+Pattern *testIdlePattern = &pixelDust;
 
 /* ---------------------- */
 
@@ -100,13 +102,15 @@ int lsb_noise(int pin, int numbits) {
 }
 
 void setup() {
-  long setupStart = millis();
   Serial.begin(57600);
-#if DEBUG
+#if WAIT_FOR_SERIAL
+  long setupStart = millis();
   while (!Serial);
-#endif
   long serialReady = millis();
   logf("begin - waited %0.2fs for Serial", (serialReady - setupStart) / 1000.);
+#elif DEBUG
+  delay(2000);
+#endif
   
   randomSeed(lsb_noise(UNCONNECTED_PIN_1, 8 * sizeof(uint32_t)));
   random16_add_entropy(lsb_noise(UNCONNECTED_PIN_2, 8 * sizeof(uint16_t)));

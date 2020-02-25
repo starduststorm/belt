@@ -15,10 +15,12 @@
 #include "MotionManager.h"
 #include "drawing.h"
 
+// HACK: Creating/initializing MotionManager (and the BNO) before AudioManager (and the i2s) resolves a crashing issue
+// I don't understand why.
+MotionManager motionManager;
 #if USE_AUDIO
 AudioManager audioManager;
 #endif
-MotionManager motionManager;
 
 class Pattern {
   protected:
@@ -279,7 +281,7 @@ class Bits : public Pattern {
           bit->alive = false;
         }
         if (bit->alive) {
-          leds[ledrc(bit->x, bit->y)] = blend(CRGB::Black, bit->color, bit->ageBrightness());
+          leds[ledxy(bit->x, bit->y)] = blend(CRGB::Black, bit->color, bit->ageBrightness());
           if (mils - bit->lastTick > preset.updateInterval) {
             bit->tick();
           }
@@ -344,6 +346,7 @@ class Sound: public Pattern {
     }
 
     void stopCompleted() {
+      Pattern::stopCompleted();
       audioManager.unsubscribe();
     }
     
@@ -353,7 +356,7 @@ class Sound: public Pattern {
       const int bandRunningAvgCount = 4;
       if (audioManager.available()) {
         if (framesWithoutAudioData > 0) {
-          logf("Went %i frames without audio data", framesWithoutAudioData);
+//          logf("Went %i frames without audio data", framesWithoutAudioData);
           framesWithoutAudioData = 0;
         }
           
@@ -374,7 +377,7 @@ class Sound: public Pattern {
           for (int p = 0; p < PANEL_COUNT; ++p) {
             for (int y = 0; y <= levelsAccum[x] && y < PANEL_HEIGHT; ++y) {
               char bright = min(0xFF, (levelsAccum[x] - y) * 0xFF);
-              leds[ledrc(x + p * PANEL_WIDTH, y)] = CHSV(20 * y, 0xFF, bright);
+              leds[ledxy(x + p * PANEL_WIDTH, y)] = CHSV(20 * y, 0xFF, bright);
             }
           }
         }
@@ -472,6 +475,7 @@ public:
   }
 
   void stopCompleted() {
+    Pattern::stopCompleted();
     motionManager.unsubscribe();
     delete [] blobs;
     blobs = NULL;
@@ -556,6 +560,7 @@ class Bars : public Pattern {
   }
 
   void stopCompleted() {
+    Pattern::stopCompleted();
     delete [] colorIndexes;
     colorIndexes = NULL;
     delete [] xvelocities;
@@ -565,7 +570,7 @@ class Bars : public Pattern {
   }
   
   void update(DrawingContext &ctx) {
-    FastLED.clear();
+    ctx.leds.fill_solid(CRGB::Black);
     
     EVERY_N_SECONDS(kSecondsPerPalette) {
       targetPalette = paletteManager.randomPalette();
@@ -604,6 +609,10 @@ class Bars : public Pattern {
     }
 
     ctx.popStyle();
+
+    if (isStopping()) {
+      stopCompleted();
+    }
   }
   
   const char *description() {
@@ -634,6 +643,9 @@ class Oscillators : public Pattern {
         ctx.point(x, y, color);
       }
     }
+    if (isStopping()) {
+      stopCompleted();
+    }
   }
   const char *description() {
     return "Oscillators";
@@ -652,6 +664,7 @@ class RainbowMotion : public Pattern {
   }
 
   void stopCompleted() {
+    Pattern::stopCompleted();
     motionManager.unsubscribe();
   }
 
@@ -682,8 +695,8 @@ class RainbowMotion : public Pattern {
 
     for (int x = 0; x < PANEL_WIDTH * PANEL_COUNT; ++x) {
       for (int y = 0; y < PANEL_HEIGHT; ++y) {
-        leds[ledrc(x,y)] = CHSV(sin8(5 * x + 2 * event.orientation.x), sin8(5 * y + 2* event.orientation.y), sin8(5 * x + 5 * y + 4 * event.orientation.z));
-//          leds[ledrc(x,y)] = CRGB(sin8(15 * x + event.orientation.x), sin8(15 * y + event.orientation.y), sin8(5 *x + 5 * y + 5 * event.orientation.z));
+        leds[ledxy(x,y)] = CHSV(sin8(5 * x + 2 * event.orientation.x), sin8(5 * y + 2* event.orientation.y), sin8(5 * x + 5 * y + 4 * event.orientation.z));
+//          leds[ledxy(x,y)] = CRGB(sin8(15 * x + event.orientation.x), sin8(15 * y + event.orientation.y), sin8(5 *x + 5 * y + 5 * event.orientation.z));
       }
     }
   }
@@ -736,6 +749,7 @@ public:
   }
 
   void stopCompleted() {
+    Pattern::stopCompleted();
     motionManager.unsubscribe();
     
     delete [] dustColorIndexes;
@@ -766,7 +780,6 @@ public:
                     1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z));
     }
 
-//    FastLED.clear();
     leds.fill_solid(CRGB::Black);
 
     for (int i = 0; i < PANEL_COUNT; ++i) {
@@ -781,8 +794,12 @@ public:
           }
           color = ColorFromPalette(currentPalette, dustColorIndexes[p]);
         }
-        leds[ledrc(x + i * PANEL_WIDTH, y)] = color;
+        leds[ledxy(x + i * PANEL_WIDTH, y)] = color;
       }
+    }
+
+    if (isStopping()) {
+      stopCompleted();
     }
   }
 

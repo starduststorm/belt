@@ -44,10 +44,10 @@ inline unsigned int ledxy(int x, int y) {
   // support zigzag
 #if DEBUG
   if (x < 0 || x >= PANEL_WIDTH * PANEL_COUNT) {
-    logf("ledrc: OUT OF BOUNDS AT %i,%i", x,y);
+    logf("ledxy: OUT OF BOUNDS AT %i,%i", x,y);
     while(1) delay(100);
   } else if (y < 0 || y >= PANEL_HEIGHT) {
-    logf("ledrc: OUT OF BOUNDS AT %i,%i", x,y);
+    logf("ledxy: OUT OF BOUNDS AT %i,%i", x,y);
     while(1) delay(100);
   }
 #endif
@@ -58,11 +58,6 @@ inline unsigned int ledxy(int x, int y) {
     index= x * PANEL_HEIGHT + y;
   }
   return index;
-}
-
-inline unsigned int ledrc(int r, int c) {
-  // FIXME: remove, name was awful
-  return ledxy(r, c);
 }
 
 class FrameCounter {

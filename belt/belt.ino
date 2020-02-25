@@ -6,9 +6,9 @@
 #endif
 // end FIXME
 
-#define DEBUG 0
-#define WAIT_FOR_SERIAL 0
-#define USE_AUDIO 0
+#define DEBUG 1
+#define WAIT_FOR_SERIAL 1
+#define USE_AUDIO 1
 
 #include <FastLED.h>
 
@@ -56,7 +56,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
 
-Pattern *testIdlePattern = &pixelDust;
+Pattern *testIdlePattern = NULL;//&soundPattern;
 
 /* ---------------------- */
 

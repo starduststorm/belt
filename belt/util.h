@@ -53,9 +53,9 @@ inline unsigned int ledxy(int x, int y) {
 #endif
   unsigned int index = 0;
   if (x & 1) {
-    index = (x + 1) * STRIP_LENGTH - 1 - y;
+    index = (x + 1) * PANEL_HEIGHT - 1 - y;
   } else {
-    index= x * STRIP_LENGTH + y;
+    index= x * PANEL_HEIGHT + y;
   }
   return index;
 }

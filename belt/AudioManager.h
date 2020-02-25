@@ -75,7 +75,7 @@ private:
     
 public:
   AudioManager() {
-    AudioMemory(13);
+    AudioMemory(12);
     fft1024_1.windowFunction(AudioWindowHanning1024);
 
     amp1.gain(gain);

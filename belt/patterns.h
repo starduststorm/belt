@@ -324,19 +324,22 @@ class Bits : public Pattern {
 
 #if USE_AUDIO
 
+#define EXTRA_GAIN 200
+
 class Sound: public Pattern {
   private:
     int framesWithoutAudioData = 0;
     CRGBPalette16 palette;
     bool usePalette;
-    float bands[BAND_COUNT];
+    float levelsAccum[BAND_COUNT];
+    float *levels = NULL;
 
     void setup() {
       usePalette = (random(3) > 0);
       if (usePalette) {
         palette = gGradientPalettes[random16(gGradientPaletteCount)];
       }
-      bzero(bands, sizeof(bands));
+      bzero(levelsAccum, sizeof(levelsAccum));
       audioManager.subscribe();
     }
 
@@ -345,39 +348,43 @@ class Sound: public Pattern {
     }
     
     void update(CRGBArray<NUM_LEDS> &leds) {
-      const int bandRunningAvgCount = 5;
+      leds.fill_solid(CRGB::Black);
+      
+      const int bandRunningAvgCount = 4;
       if (audioManager.available()) {
         if (framesWithoutAudioData > 0) {
           logf("Went %i frames without audio data", framesWithoutAudioData);
           framesWithoutAudioData = 0;
         }
-        leds.fill_solid(CRGB::Black);
           
-        float *levels = audioManager.getLevels();
-
+        levels = audioManager.getLevels();
+        for (int i = 0; i < BAND_COUNT; ++i) {
+          levels[i] *= EXTRA_GAIN;
+        }
+      } else {
+        framesWithoutAudioData++;
+      }
+      if (levels != NULL) {
         for (int x = 0; x < PANEL_WIDTH; ++x) {
           float level = levels[x+2];
-      
-          level *= 200;
-
-          bands[x] = (bands[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
-
+          
+          levelsAccum[x] = (levelsAccum[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
+        
           // Just draw the same thing to both panels for now
           for (int p = 0; p < PANEL_COUNT; ++p) {
-            for (int y = 0; y <= bands[x] && y < PANEL_HEIGHT; ++y) {
-              char bright = min(0xFF, (bands[x] - y) * 0xFF);
+            for (int y = 0; y <= levelsAccum[x] && y < PANEL_HEIGHT; ++y) {
+              char bright = min(0xFF, (levelsAccum[x] - y) * 0xFF);
               leds[ledrc(x + p * PANEL_WIDTH, y)] = CHSV(20 * y, 0xFF, bright);
             }
           }
         }
       } else {
-        framesWithoutAudioData++;
-        // FIXME: if no data available, assume levels same as last frame and still draw in order to keep animations smooth
+        
       }
-
-    EVERY_N_MILLISECONDS(1000) {
-      audioManager.printStatistics();
-    }
+      
+      EVERY_N_MILLISECONDS(1000) {
+        audioManager.printStatistics();
+      }
       
       if (isStopping()) {
         stopCompleted();

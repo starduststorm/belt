@@ -19,26 +19,12 @@
 #define TOTAL_WIDTH PANEL_COUNT * PANEL_WIDTH
 #define TOTAL_HEIGHT PANEL_HEIGHT
 
-// FIXME: remove:
-#define STRIP_LENGTH PANEL_HEIGHT
-#define STRIP_COUNT PANEL_WIDTH
-//
-
 #define PANEL_LEDS (PANEL_WIDTH * PANEL_HEIGHT)
 #define NUM_LEDS (PANEL_LEDS * PANEL_COUNT)
-
-// Pin 23 is the microphone pin, so we may be seeding random with mic noise
-#define UNCONNECTED_PIN_1 15 // FIXME: now used for LEDS
-#define UNCONNECTED_PIN_2 23
 
 #include "util.h"
 #include "patterns.h"
 #include "AudioManager.h"
-
-/* ---- Options ---- */
-// FIXME: should have options here for mounting, e.g. side-down vs. corner down, which strand is top/bottom, etc.
-// though changing these flags in the field is not very practical if it requires a recompile.
-/* ---- ------------*/
 
 CRGBArray<NUM_LEDS> leds;
 DrawingContext *drawingContext;
@@ -46,14 +32,14 @@ DrawingContext *drawingContext;
 Droplets dropletsPattern;
 Bits bitsPattern;
 SmoothPalettes smoothPalettes;
+RaverPlaid raverPlaid;
+Motion motion;
+PixelDust pixelDust;
 Bars barsPattern;
 Oscillators oscillatorsPattern;
 #if USE_AUDIO
 Sound soundPattern;
 #endif
-RaverPlaid raverPlaid;
-Motion motion;
-PixelDust pixelDust;
 
 Pattern *idlePatterns[] = {
                             &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust, &barsPattern, &oscillatorsPattern,
@@ -77,6 +63,9 @@ Pattern *testIdlePattern = &pixelDust;
 unsigned long lastTrigger = 0;
 FrameCounter fc;
 
+#define UNCONNECTED_PIN_1 A9
+#define UNCONNECTED_PIN_2 A3
+
 /* 
  * These need to be specific pins on Teensy 4.0
  * https://github.com/FastLED/FastLED/wiki/Parallel-Output
@@ -86,8 +75,6 @@ FrameCounter fc;
  */
 #define DATA_PIN_1 14
 #define DATA_PIN_2 15
-
-//#define MIC_PIN 23
 
 void applyBrightnessSettings();
 

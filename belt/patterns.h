@@ -519,7 +519,7 @@ public:
 class Bars : public Pattern {
   const int kSecondsPerPalette = 10;
   const int kBarWidth = 8;
-   unsigned numBars = 0;
+  unsigned numBars = 0;
   
   int *colorIndexes = NULL;
   float *xvelocities = NULL;
@@ -686,25 +686,18 @@ class RainbowMotion : public Pattern {
   }
 };
 
+/* ------------------------------------------------------------------------------------------------------ */
 
-/*
- *    A palette blend could look cool here but I'd need to handle black pixels
- *    
- *     EVERY_N_SECONDS( SECONDS_PER_PALETTE ) {
-        gCurrentPaletteNumber = addmod8( gCurrentPaletteNumber, random8(16), gGradientPaletteCount);
-        gTargetPalette = gGradientPalettes[ gCurrentPaletteNumber ];
-      }
-
-      EVERY_N_MILLISECONDS(40) {
-        nblendPaletteTowardPalette( gCurrentPalette, gTargetPalette, 16);
-      }
- */
 class PixelDust : public Pattern {
 private:
   static const unsigned int numParticles = 50;
   Adafruit_PixelDust *pixelDust[PANEL_COUNT];
-  CRGBPalette16 palette;
-  CRGB *dustColors = NULL;
+
+  const int kSecondsPerPalette = 10;
+  CRGBPalette16 currentPalette;
+  CRGBPalette16 targetPalette;
+
+  int *dustColorIndexes = NULL;
 public:
   PixelDust() {
     for (int i = 0; i < PANEL_COUNT; ++i) {
@@ -720,36 +713,37 @@ public:
       }
       pixelDust[i]->randomize();
     }
-  
-    logf("picking palette");
-    
-    if (dustColors) {
-      delete [] dustColors;
-    }
-    dustColors = new CRGB[numParticles];
+        
+    assert(dustColorIndexes == NULL, "dustColorIndexes memory not handled properly");
+    dustColorIndexes = new int[numParticles];
     resetPalette();
   }
 
   void resetPalette() {
-    palette = paletteManager.randomPalette();
-
+    currentPalette = paletteManager.randomPalette();
+    targetPalette = paletteManager.randomPalette();
+    
     for (unsigned i = 0; i < numParticles; ++i) {
-      CRGB color = CRGB::Black;
-      do {
-        color = ColorFromPalette(palette, random8());
-        dustColors[i] = color;
-      } while (!color);
+      dustColorIndexes[i] = random8();
     }
   }
 
   void stopCompleted() {
     motionManager.unsubscribe();
     
-    delete [] dustColors;
-    dustColors = NULL;
+    delete [] dustColorIndexes;
+    dustColorIndexes = NULL;
   }
 
   void update(CRGBArray<NUM_LEDS> &leds) {
+    EVERY_N_MILLISECONDS(40) {
+      nblendPaletteTowardPalette(currentPalette, targetPalette, 16);
+    }
+    EVERY_N_SECONDS(kSecondsPerPalette) {
+      targetPalette = paletteManager.randomPalette();
+    }
+
+    
     dimension_t x, y;
     sensors_event_t accel;
     sensors_event_t linear_accel;
@@ -771,12 +765,17 @@ public:
     for (int i = 0; i < PANEL_COUNT; ++i) {
       for (unsigned int p = 0; p < numParticles; p++) {
         pixelDust[i]->getPosition(p, &x, &y);
-        leds[ledrc(x + i * PANEL_WIDTH, y)] = dustColors[p];
+        
+        CRGB color = ColorFromPalette(currentPalette, dustColorIndexes[p]);
+        while (!color) {
+          dustColorIndexes[p]++;
+          if (dustColorIndexes[p] > 0xFF) {
+            dustColorIndexes[p] -= 0xFF;
+          }
+          color = ColorFromPalette(currentPalette, dustColorIndexes[p]);
+        }
+        leds[ledrc(x + i * PANEL_WIDTH, y)] = color;
       }
-    }
-
-    EVERY_N_SECONDS(10) {
-      resetPalette();
     }
   }
 

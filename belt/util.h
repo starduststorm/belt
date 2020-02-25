@@ -6,7 +6,7 @@
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
 #if DEBUG
-#define assert(expr, reason) if (!(expr)) { logf("Assertion failed: %s", reason); while (1) delay(100); }
+#define assert(expr, reason) if (!(expr)) { logf("ASSERTION FAILED: %s", reason); while (1) delay(100); }
 #else
 #define assert(expr, reason)
 #endif

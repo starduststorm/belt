@@ -54,9 +54,9 @@ Pattern *lastPattern = NULL;
 
 /* ---- Test Options ---- */
 const bool kTestPatternTransitions = true;
-const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 10 : 60 * 2);
+const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-Pattern *testIdlePattern = &pixelDust;
+Pattern *testIdlePattern = &barsPattern;
 
 /* ---------------------- */
 
@@ -91,6 +91,14 @@ int lsb_noise(int pin, int numbits) {
 
 void buttonSinglePress() {
   logf("single press!");
+  // TODO: make deterministic?
+  if (activePattern != NULL && activePattern->isRunning()) {
+    if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
+      activePattern->lazyStop();
+      lastPattern = activePattern;
+      activePattern = NULL;
+    }
+  }
 }
 
 void buttonDoublePress() {

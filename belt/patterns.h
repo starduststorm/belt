@@ -750,6 +750,13 @@ public:
 
 /* ------------------------------------------------------------------------------------------------------ */
 
+// TODO: make 2-dimentional
+// vary drop shape and size by varying parameters flow,eff,loss,interval etc. parameters randomly, or to data fed by sound or motion
+
+// this pattern, and others, can react to motion data or sound always, if it's detected, only when toggled, or never. 
+// if it can be detected, then I can run idle behavior when it's absent. 
+// if toggled, that would enable e.g. Bars pattern to follow my motion with a tiny bit of inertia so it spins as I walk around, even slowly, or can be toggled off to just run idle
+
 class Droplets : public Pattern {
   private:
     unsigned long lastDrop;

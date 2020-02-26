@@ -576,12 +576,18 @@ const uint8_t gGradientPaletteCount =
 
 /* --- */
 
+
+static bool isBlack(CRGB color) {
+  // I'm looking at you fire_gp
+  return (color.r + color.g + color.b < 3);
+}
+
 template <class T>
 class PaletteManager {
 private:
   bool paletteHasBlack(T palette) {
     for (uint16_t i = 0; i < sizeof(T)/3; ++i) {
-      if (!palette.entries[i]) {
+      if (isBlack(palette.entries[i])) {
         return true;
       }
     }
@@ -664,6 +670,7 @@ private:
     }
     return manager.nonBlackPalette();
   }
+
 public:
   int secondsPerPalette = 10;
   bool allowBlack = true;
@@ -699,7 +706,7 @@ public:
     }
     T palette = getPalette();
     CRGB color = ColorFromPalette(palette, colorIndexes[n]);
-    while (!allowBlack && !color) {
+    while (!allowBlack && isBlack(color)) {
       colorIndexes[n] = addmod8(colorIndexes[n], 1, 0xFF);
       color = ColorFromPalette(palette, colorIndexes[n]);
     }
@@ -726,6 +733,7 @@ public:
   void releaseTrackedColors() {
     if (colorIndexes != NULL) {
       delete [] colorIndexes;
+      colorIndexes = NULL;
       colorIndexCount = 0;
     }
   }

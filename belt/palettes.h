@@ -698,12 +698,18 @@ public:
       return CRGB::Black;
     }
     T palette = getPalette();
-    CRGB color = palette[colorIndexes[n]];
+    CRGB color = ColorFromPalette(palette, colorIndexes[n]);
     while (!color) {
-      addmod8(colorIndexes[n], 1, 0xFF);
+      colorIndexes[n] = addmod8(colorIndexes[n], 1, 0xFF);
       color = ColorFromPalette(palette, colorIndexes[n]);
     }
     return color;
+  }
+
+  void shiftTrackedColors(uint8_t addend) {
+    for (unsigned i = 0; i < colorIndexCount; ++i) {
+      colorIndexes[i] = addmod8(colorIndexes[i], addend, 0xFF);
+    }
   }
 
   void prepareTrackedColors(uint8_t count) {
@@ -717,7 +723,7 @@ public:
     }
   }
 
-  void releasePaletteColors() {
+  void releaseTrackedColors() {
     if (colorIndexes != NULL) {
       delete [] colorIndexes;
       colorIndexCount = 0;

@@ -328,8 +328,6 @@ class Bits : public Pattern {
 class Sound: public Pattern, public PaletteRotation<CRGBPalette256> {
 private:
   int framesWithoutAudioData = 0;
-  CRGBPalette16 palette;
-  bool usePalette;
   float levelsAccum[BAND_COUNT];
   float *levels = NULL;
 public:
@@ -524,31 +522,21 @@ public:
 // idea: a pattern that can handle motion, sound, or be idle
 // this is the idle version. could feed audio into it to make the bars pulse in brightness, or feed motion to make them move
 
-class Bars : public Pattern {
+class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
   const int kSecondsPerPalette = 10;
   const int kBarWidth = 8;
   unsigned numBars = 0;
   
-  int *colorIndexes = NULL;
   float *xvelocities = NULL;
   float *xoffsets = NULL;
   
-  CRGBPalette16 currentPalette;
-  CRGBPalette16 targetPalette;
-  
   void setup(DrawingContext &ctx) {
-    currentPalette = paletteManager.randomPalette();
-    targetPalette = paletteManager.randomPalette();
-    
-    assert(colorIndexes == NULL, "Color indexes array not nulled");
     numBars = ctx.width / kBarWidth / 2 * ctx.height;
-    colorIndexes = new int[numBars];
+
+    prepareTrackedColors(numBars);
+    
     xvelocities = new float[ctx.height];
     xoffsets= new float[ctx.height];
-
-    for (unsigned i = 0; i < numBars; ++i) {
-      colorIndexes[i] = random8();
-    }
 
     for (int i = 0 ; i < ctx.height; ++i) {
       xvelocities[i] = random8() / (255.0 * 2) + 0.75;
@@ -558,29 +546,19 @@ class Bars : public Pattern {
 
   void stopCompleted() {
     Pattern::stopCompleted();
-    delete [] colorIndexes;
-    colorIndexes = NULL;
     delete [] xvelocities;
     xvelocities = NULL;
     delete [] xoffsets;
     xoffsets = NULL;
+
+    releaseTrackedColors();
   }
   
   void update(DrawingContext &ctx) {
     ctx.leds.fill_solid(CRGB::Black);
-    
-    EVERY_N_SECONDS(kSecondsPerPalette) {
-      targetPalette = paletteManager.randomPalette();
-    }
-    
-    EVERY_N_MILLISECONDS(40) {
-      nblendPaletteTowardPalette(currentPalette, targetPalette, 16);
-    }
-   
+
     EVERY_N_MILLISECONDS(20) {
-      for (unsigned i = 0; i < numBars; ++i) {
-        colorIndexes[i] = addmod8(colorIndexes[i], 1, 0xFF);
-      }
+      shiftTrackedColors(1);
     }
     
     ctx.pushStyle();
@@ -596,7 +574,7 @@ class Bars : public Pattern {
         int x1 = row_startx + x*kBarWidth;
         int x2 = row_startx + (x+1)*kBarWidth - 1;
 
-        CRGB color = ColorFromPalette(currentPalette, colorIndexes[y * ctx.width / kBarWidth / 2 + x / 2]);
+        CRGB color = getTrackedColor(y * ctx.width / kBarWidth / 2 + x / 2);
         ctx.line(x1, y, x2, y, color);
       }
       xoffsets[y] += xvelocities[y] * frameTime() / 30.0;

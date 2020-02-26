@@ -1,7 +1,7 @@
 
 #include <stack>
 
-// FIXME: Workaround for linker issues when using copy-constructors for DrawStyle struct (since something is built with -fno-exceptions)
+// Workaround for linker issues when using copy-constructors for DrawStyle struct (since something is built with -fno-exceptions)
 // https://forum.pjrc.com/threads/57192-Teensy-4-0-linker-issues-with-STL-libraries
 extern "C"{
   int __exidx_start(){ return -1;}

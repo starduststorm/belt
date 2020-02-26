@@ -12,7 +12,6 @@
 
 #include <FastLED.h>
 
-#define SERIAL_LOGGING 1
 #define PANEL_WIDTH 32
 #define PANEL_HEIGHT 8
 #define PANEL_COUNT 2
@@ -113,13 +112,20 @@ void buttonDoubleLongPress() {
   logf("double long press");
 }
 
+bool serialTimeout = false;
+unsigned long setupDoneTime;
+
 void setup() {
   Serial.begin(57600);
 #if WAIT_FOR_SERIAL
   long setupStart = millis();
-  while (!Serial);
-  long serialReady = millis();
-  logf("begin - waited %0.2fs for Serial", (serialReady - setupStart) / 1000.);
+  while (!Serial) {
+    if (millis() - setupStart > 5000) {
+      serialTimeout = true;
+      break;
+    }
+  }
+  logf("begin - waited %0.2fs for Serial", (millis()- setupStart) / 1000.);
 #elif DEBUG
   delay(2000);
 #endif
@@ -140,9 +146,26 @@ void setup() {
   controls.onLongPress(&buttonLongPress);
   controls.onDoubleLongPress(&buttonDoubleLongPress);
   controls.update();
+
+  setupDoneTime = millis();
+}
+
+void serialTimeoutIndicator() {
+  leds.fill_solid(CRGB::Black);
+  if ((millis() - setupDoneTime) % 250 < 100) {
+    for (int p = 0; p < PANEL_COUNT; ++p) {
+      drawingContext->line(p*PANEL_WIDTH, 0, p*PANEL_WIDTH, PANEL_HEIGHT-1, CRGB::Red);
+    }
+  }
+  FastLED.show();
+  delay(20);
 }
 
 void loop() {
+  if (serialTimeout && millis() - setupDoneTime < 1000) {
+    serialTimeoutIndicator();
+    return;
+  }
   for (unsigned i = 0; i < kIdlePatternsCount; ++i) {
     Pattern *pattern = idlePatterns[i];
     if (pattern->isRunning() || pattern->isStopping()) {

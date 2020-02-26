@@ -29,7 +29,9 @@ public:
     logf("+MotionManager");
     retainCount++;
     if (retainCount == 1) {
+      logf("Powering up BNO...");
       bno.enterNormalMode();
+      logf("Powered up BNO");
     }
   }
   

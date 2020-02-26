@@ -25,6 +25,7 @@
 #include "util.h"
 #include "patterns.h"
 #include "AudioManager.h"
+#include "controls.h"
 
 CRGBArray<NUM_LEDS> leds;
 DrawingContext *drawingContext;
@@ -61,6 +62,7 @@ Pattern *testIdlePattern = &pixelDust;
 
 unsigned long lastTrigger = 0;
 FrameCounter fc;
+Controls controls;
 
 #define UNCONNECTED_PIN_1 A9
 #define UNCONNECTED_PIN_2 A3
@@ -87,6 +89,22 @@ int lsb_noise(int pin, int numbits) {
   return noise;
 }
 
+void buttonSinglePress() {
+  logf("single press!");
+}
+
+void buttonDoublePress() {
+  logf("double press!");
+}
+
+void buttonLongPress() {
+  logf("long press!");
+}
+
+void buttonDoubleLongPress() {
+  logf("double long press");
+}
+
 void setup() {
   Serial.begin(57600);
 #if WAIT_FOR_SERIAL
@@ -105,11 +123,15 @@ void setup() {
   // This is very undesirable, so I'd rather use uncorrected colors .setCorrection((UncorrectedColor).
   //.setCorrection(TypicalSMD5050);
   FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
-  LEDS.setBrightness(127);
 
   drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
 
   fc.tick();
+  controls.onSinglePress(&buttonSinglePress);
+  controls.onDoublePress(&buttonDoublePress);
+  controls.onLongPress(&buttonLongPress);
+  controls.onDoubleLongPress(&buttonDoubleLongPress);
+  controls.update();
 }
 
 void loop() {
@@ -156,6 +178,7 @@ void loop() {
   
   fc.tick();
   fc.clampToFramerate(90);
+  controls.update();
 }
 
 void applyBrightnessSettings() {

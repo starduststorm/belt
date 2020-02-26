@@ -507,16 +507,19 @@ DEFINE_GRADIENT_PALETTE( Blue_Cyan_Yellow_gp ) {
 };
 
 // Gradient palette for trans flag
-// Size: 28 bytes of program space.
+// Size: 40 bytes of program space.
 
 DEFINE_GRADIENT_PALETTE( Trans_Flag_gp ) {
-  0,   0,    0,    0,
-  46,  0x4E, 0xC3, 0xF8,
-  88,  0xF1, 0x55, 0x70,
-  130, 0xFF, 0xFF, 0xFF,
-  172, 0xF1, 0x55, 0x70,
-  214, 0x4E, 0xC3, 0xF8,
-  255, 0,    0,    0
+  0,   0x2A, 0x9F, 0xFA,
+  50,  0x2A, 0x9F, 0xFA,
+  51,  0xF1, 0x55, 0x70,
+  101, 0xF1, 0x55, 0x70,
+  102, 0xFF, 0xFF, 0xFF,
+  152, 0xFF, 0xFF, 0xFF,
+  153, 0xF1, 0x55, 0x70,
+  203, 0xF1, 0x55, 0x70,
+  204, 0x2A, 0x9F, 0xFA,
+  255, 0x2A, 0x9F, 0xFA,
 };
 
 // Single array of defined cpt-city color palettes.
@@ -573,26 +576,151 @@ const uint8_t gGradientPaletteCount =
 
 /* --- */
 
+template <class T>
 class PaletteManager {
+private:
+  bool paletteHasBlack(T palette) {
+    for (uint16_t i = 0; i < sizeof(T)/3; ++i) {
+      if (!palette.entries[i]) {
+        return true;
+      }
+    }
+    return false;
+  }
 public:  
   PaletteManager() {
   }
 
-  unsigned int colorsInPalette(CRGBPalette16 &palette) {
-    // FIXME: how
-    return 0;
-  }
-
-  CRGBPalette16 getPalette(int choice) {
+  T getPalette(int choice) {
     return gGradientPalettes[choice];
   }
   
-  CRGBPalette16 randomPalette() {
+  T nonBlackPalette() {
+    unsigned choice;
+    T palette;
+    bool hasBlack;
+    do {
+      choice = random16(gGradientPaletteCount);
+      palette = gGradientPalettes[choice];
+      hasBlack = paletteHasBlack(palette);
+    } while (hasBlack);
+    logf("Picked Palette %u", choice);
+    return palette;
+  }
+  
+  T randomPalette() {
     unsigned choice = random16(gGradientPaletteCount);
     logf("Picked Palette %u", choice);
-    CRGBPalette16 palette = gGradientPalettes[choice];
+    T palette = gGradientPalettes[choice];
     return palette;
   }
 };
 
-PaletteManager paletteManager;
+PaletteManager<CRGBPalette16> paletteManager;
+
+/* -------------------------------------------------------------------- */
+
+void nblendPaletteTowardPalette(CRGBPalette256& current, CRGBPalette256& target, uint16_t maxChanges)
+{
+  uint8_t* p1;
+  uint8_t* p2;
+  uint16_t  changes = 0;
+
+  p1 = (uint8_t*)current.entries;
+  p2 = (uint8_t*)target.entries;
+
+  const uint16_t totalChannels = sizeof(CRGBPalette256);
+  for( uint16_t i = 0; i < totalChannels; i++) {
+    // if the values are equal, no changes are needed
+    if( p1[i] == p2[i] ) { continue; }
+
+    // if the current value is less than the target, increase it by one
+    if( p1[i] < p2[i] ) { p1[i]++; changes++; }
+
+    // if the current value is greater than the target,
+    // increase it by one (or two if it's still greater).
+    if( p1[i] > p2[i] ) {
+        p1[i]--; changes++;
+        if( p1[i] > p2[i] ) { p1[i]--; }
+    }
+
+    // if we've hit the maximum number of changes, exit
+    if( changes >= maxChanges) { break; }
+  }
+}
+
+template <class T>
+class PaletteRotation {
+private:
+  PaletteManager<T> manager;
+  T currentPalette;
+  T targetPalette;
+  uint8_t *colorIndexes = NULL;
+  uint8_t colorIndexCount = 0;
+
+  T choosePalette() {
+    if (includePalettesWithBlack) {
+      return manager.randomPalette();
+    }
+    return manager.nonBlackPalette();
+  }
+public:
+  int secondsPerPalette = 10;
+  bool includePalettesWithBlack = true;
+  
+  PaletteRotation(bool includePalettesWithBlack=true) {
+    this->includePalettesWithBlack = includePalettesWithBlack;
+    currentPalette = choosePalette();
+    targetPalette = choosePalette();
+  }
+
+  ~PaletteRotation() {
+    delete [] colorIndexes;
+  }
+  
+  T getPalette() {
+      EVERY_N_MILLISECONDS(40) {
+        nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
+      }
+      EVERY_N_SECONDS(secondsPerPalette) {
+        targetPalette = choosePalette();
+      }
+      return currentPalette;
+  }
+
+  CRGB getPaletteColor(uint8_t n) {
+    return ColorFromPalette(getPalette(), n);
+  }
+
+  CRGB getTrackedColor(uint8_t n) {
+    assert(n < colorIndexCount, "getTrackedColor: n must be less than tracked color count");
+    if (n >= colorIndexCount) {
+      return CRGB::Black;
+    }
+    T palette = getPalette();
+    CRGB color = palette[colorIndexes[n]];
+    while (!color) {
+      addmod8(colorIndexes[n], 1, 0xFF);
+      color = ColorFromPalette(palette, colorIndexes[n]);
+    }
+    return color;
+  }
+
+  void prepareTrackedColors(uint8_t count) {
+    if (colorIndexes) {
+      delete [] colorIndexes;
+    }
+    colorIndexCount = count;
+    colorIndexes = new uint8_t[colorIndexCount];
+    for (unsigned i = 0; i < colorIndexCount; ++i) {
+      colorIndexes[i] = random8();
+    }
+  }
+
+  void releasePaletteColors() {
+    if (colorIndexes != NULL) {
+      delete [] colorIndexes;
+      colorIndexCount = 0;
+    }
+  }
+};

@@ -136,7 +136,6 @@ class Pattern {
     virtual const char *description() = 0;
 };
 
-
 /* --------------------------- */
 
 
@@ -322,81 +321,79 @@ class Bits : public Pattern {
 // FIXME: look into just grabbing lots of data and pushing it through map_data_into_colors_through_palette, using data stream from microphone or motion
 
 
-
-
 #if USE_AUDIO
 
 #define EXTRA_GAIN 200
 
-class Sound: public Pattern {
-  private:
-    int framesWithoutAudioData = 0;
-    CRGBPalette16 palette;
-    bool usePalette;
-    float levelsAccum[BAND_COUNT];
-    float *levels = NULL;
+class Sound: public Pattern, public PaletteRotation<CRGBPalette256> {
+private:
+  int framesWithoutAudioData = 0;
+  CRGBPalette16 palette;
+  bool usePalette;
+  float levelsAccum[BAND_COUNT];
+  float *levels = NULL;
+public:
+  Sound() : PaletteRotation(includePalettesWithBlack=false) {
+  }
+  
+  void setup() {
+    bzero(levelsAccum, sizeof(levelsAccum));
+    audioManager.subscribe();
+  }
 
-    void setup() {
-      usePalette = (random(3) > 0);
-      if (usePalette) {
-        palette = gGradientPalettes[random16(gGradientPaletteCount)];
-      }
-      bzero(levelsAccum, sizeof(levelsAccum));
-      audioManager.subscribe();
-    }
-
-    void stopCompleted() {
-      Pattern::stopCompleted();
-      audioManager.unsubscribe();
-    }
+  void stopCompleted() {
+    Pattern::stopCompleted();
+    audioManager.unsubscribe();
+  }
+  
+  void update(CRGBArray<NUM_LEDS> &leds) {
+    leds.fill_solid(CRGB::Black);
     
-    void update(CRGBArray<NUM_LEDS> &leds) {
-      leds.fill_solid(CRGB::Black);
-      
-      const int bandRunningAvgCount = 4;
-      if (audioManager.available()) {
-        if (framesWithoutAudioData > 0) {
+    const int bandRunningAvgCount = 4;
+    if (audioManager.available()) {
+      if (framesWithoutAudioData > 0) {
 //          logf("Went %i frames without audio data", framesWithoutAudioData);
-          framesWithoutAudioData = 0;
-        }
-          
-        levels = audioManager.getLevels();
-        for (int i = 0; i < BAND_COUNT; ++i) {
-          levels[i] *= EXTRA_GAIN;
-        }
-      } else {
-        framesWithoutAudioData++;
+        framesWithoutAudioData = 0;
       }
-      if (levels != NULL) {
-        for (int x = 0; x < PANEL_WIDTH; ++x) {
-          float level = levels[x+2];
-          
-          levelsAccum[x] = (levelsAccum[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
+      
+      levels = audioManager.getLevels();
+      for (int i = 0; i < BAND_COUNT; ++i) {
+        levels[i] *= EXTRA_GAIN;
+      }
+    } else {
+      framesWithoutAudioData++;
+    }
+    if (levels != NULL) {
+      for (int x = 0; x < PANEL_WIDTH; ++x) {
+        float level = levels[x+2];
         
-          // Just draw the same thing to both panels for now
-          for (int p = 0; p < PANEL_COUNT; ++p) {
-            for (int y = 0; y <= levelsAccum[x] && y < PANEL_HEIGHT; ++y) {
-              char bright = min(0xFF, (levelsAccum[x] - y) * 0xFF);
-              leds[ledxy(x + p * PANEL_WIDTH, y)] = CHSV(20 * y, 0xFF, bright);
-            }
+        levelsAccum[x] = (levelsAccum[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
+        
+        // Just draw the same thing to both panels for now
+        for (int p = 0; p < PANEL_COUNT; ++p) {
+          for (int y = 0; y <= levelsAccum[x] && y < PANEL_HEIGHT; ++y) {
+            char bright = min(0xFF, (levelsAccum[x] - y) * 0xFF);
+//            CRGB color = CHSV(20 * y, 0xFF, bright); // rainbow            
+            CRGB color = getPaletteColor(map(y, 0, PANEL_HEIGHT-1, 0, 0xFF));
+            color.nscale8_video(bright);
+            leds[ledxy(x + p * PANEL_WIDTH, y)] = color;
           }
         }
-      } else {
-        
-      }
-      
-      EVERY_N_MILLISECONDS(1000) {
-        audioManager.printStatistics();
-      }
-      
-      if (isStopping()) {
-        stopCompleted();
       }
     }
-public:
-    const char *description() {
-      return "Sound";
+    
+    EVERY_N_MILLISECONDS(5000) {
+      audioManager.printStatistics();
     }
+    
+    if (isStopping()) {
+      stopCompleted();
+    }
+  }
+  
+  const char *description() {
+    return "Sound";
+  }
 };
 
 #endif

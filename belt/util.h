@@ -8,7 +8,7 @@
 #if DEBUG
 #define assert(expr, reason) if (!(expr)) { logf("ASSERTION FAILED: %s", reason); while (1) delay(100); }
 #else
-#define assert(expr, reason)
+#define assert(expr, reason) if (!(expr)) { logf("ASSERTION FAILED: %s", reason); }
 #endif
 
 void logf(const char *format, ...)

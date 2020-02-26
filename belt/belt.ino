@@ -32,7 +32,6 @@ DrawingContext *drawingContext;
 Droplets dropletsPattern;
 Bits bitsPattern;
 SmoothPalettes smoothPalettes;
-RaverPlaid raverPlaid;
 Motion motion;
 PixelDust pixelDust;
 Bars barsPattern;
@@ -42,7 +41,7 @@ Sound soundPattern;
 #endif
 
 Pattern *idlePatterns[] = {
-                            &bitsPattern, &dropletsPattern, &smoothPalettes, &raverPlaid, &motion, &pixelDust, &barsPattern, &oscillatorsPattern,
+                            &bitsPattern, &dropletsPattern, &smoothPalettes, &motion, &pixelDust, &barsPattern, &oscillatorsPattern,
 #if USE_AUDIO
                             &soundPattern
 #endif

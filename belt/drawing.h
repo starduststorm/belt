@@ -76,6 +76,7 @@ public:
   
   void line(float x1, float y1, float x2, float y2, CRGB src) {
     // TODO: anti-alias when floats are passed. make this the integer version.
+    // use dim_video for anti-aliasing
     bool useY = (x1 == x2 || fabsf((y2 - y1) / (float)(x2 - x1)) > 1);
     if (useY) {
       if (y1 == y2) {

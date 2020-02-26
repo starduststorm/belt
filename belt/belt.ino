@@ -42,7 +42,7 @@ Sound soundPattern;
 #endif
 
 Pattern *idlePatterns[] = {
-                            &bitsPattern, &dropletsPattern, &smoothPalettes, &motion, &pixelDust, &barsPattern, &oscillatorsPattern,
+                            &smoothPalettes, &pixelDust, &barsPattern, &oscillatorsPattern,
 #if USE_AUDIO
                             &soundPattern
 #endif
@@ -56,7 +56,7 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = true;
 const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-Pattern *testIdlePattern = &barsPattern;
+Pattern *testIdlePattern = NULL;//&barsPattern;
 
 /* ---------------------- */
 

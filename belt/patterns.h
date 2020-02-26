@@ -100,6 +100,7 @@ class Pattern {
       if (subPattern) {
         subPattern->lazyStop();
       }
+      stopCompleted(); // FIXME: remove this whole "delayed stop" pattern
     }
 
     void stop() {
@@ -185,8 +186,8 @@ class Bits : public Pattern {
         void reset(CRGB color) {
           birthdate = millis();
           alive = true;
-          x = random8() % PANEL_WIDTH * PANEL_COUNT;
-          y = random8() % PANEL_HEIGHT;
+          x = random8() % TOTAL_WIDTH;
+          y = random8() % TOTAL_HEIGHT;
           if (false && random(2)) {
             dy = random(2) ? -1 : 1;
             dx = 0;
@@ -210,7 +211,7 @@ class Bits : public Pattern {
           return 0xFF;
         }
         void tick() {
-          x = mod_wrap(x+dx, PANEL_WIDTH);
+          x = mod_wrap(x+dx, TOTAL_WIDTH);
           y = mod_wrap(y+dy, PANEL_HEIGHT);
           lastTick = millis();
         }
@@ -330,6 +331,7 @@ private:
   int framesWithoutAudioData = 0;
   float levelsAccum[BAND_COUNT];
   float *levels = NULL;
+  bool upsideDown = false;
 public:
   Sound() : PaletteRotation(allowBlack=false) {
   }
@@ -337,6 +339,7 @@ public:
   void setup() {
     bzero(levelsAccum, sizeof(levelsAccum));
     audioManager.subscribe();
+    upsideDown = (random8(2) == 0);
   }
 
   void stopCompleted() {
@@ -374,7 +377,7 @@ public:
 //            CRGB color = CHSV(20 * y, 0xFF, bright); // rainbow            
             CRGB color = getPaletteColor(map(y, 0, PANEL_HEIGHT-1, 0, 0xFF));
             color.nscale8_video(bright);
-            leds[ledxy(x + p * PANEL_WIDTH, y)] = color;
+            leds[ledxy(x + p * PANEL_WIDTH, (upsideDown ? TOTAL_HEIGHT - y - 1 : y))] = color;
           }
         }
       }
@@ -454,7 +457,9 @@ public:
     for (int i = 0; i < kBlobCount; ++i) {
       int xbucketStart = (i * xbucketSize) % ctx.width;
       int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);
-      
+      EVERY_N_MILLISECONDS(1000) {
+        logf("ybucketStart = %i", ybucketStart);
+      }
       int x = xbucketStart + random8(xbucketSize);
       int y = ybucketStart + random8(ybucketSize - 1);
       CRGB color = ColorFromPalette(palette, random8());
@@ -504,6 +509,10 @@ public:
       }
       ctx.popStyle();
       lastDisplay = millis();
+    }
+
+    if (isStopping()) {
+      stopCompleted();
     }
   }
   

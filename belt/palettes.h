@@ -659,17 +659,17 @@ private:
   uint8_t colorIndexCount = 0;
 
   T choosePalette() {
-    if (includePalettesWithBlack) {
+    if (allowBlack) {
       return manager.randomPalette();
     }
     return manager.nonBlackPalette();
   }
 public:
   int secondsPerPalette = 10;
-  bool includePalettesWithBlack = true;
+  bool allowBlack = true;
   
-  PaletteRotation(bool includePalettesWithBlack=true) {
-    this->includePalettesWithBlack = includePalettesWithBlack;
+  PaletteRotation(bool allowBlack=true) {
+    this->allowBlack = allowBlack;
     currentPalette = choosePalette();
     targetPalette = choosePalette();
   }
@@ -699,7 +699,7 @@ public:
     }
     T palette = getPalette();
     CRGB color = ColorFromPalette(palette, colorIndexes[n]);
-    while (!color) {
+    while (!allowBlack && !color) {
       colorIndexes[n] = addmod8(colorIndexes[n], 1, 0xFF);
       color = ColorFromPalette(palette, colorIndexes[n]);
     }

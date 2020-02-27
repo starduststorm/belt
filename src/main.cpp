@@ -8,7 +8,7 @@
 
 #define DEBUG 1
 #define WAIT_FOR_SERIAL 1
-#define USE_AUDIO 1
+#define USE_AUDIO 0
 
 #include <FastLED.h>
 

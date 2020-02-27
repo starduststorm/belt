@@ -714,10 +714,8 @@ public:
         if(!pixelDust[i]->begin()) {
           logf("PixelDust init failed");
         }
+        pixelDust[i]->randomize();
       }
-    }
-    for (int i = 0; i < PANEL_COUNT; ++i) {
-      pixelDust[i]->randomize();
     }
 
     prepareTrackedColors(numParticles);

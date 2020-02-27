@@ -5,10 +5,6 @@
 #define AUDIO_MANAGER_H
 
 #include <Audio.h>
-#include <Wire.h>
-#include <SPI.h>
-#include <SD.h>
-#include <SerialFlash.h>
 #include "patterns.h"
 
 // GUItool: begin automatically generated code

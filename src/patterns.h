@@ -703,12 +703,20 @@ public:
     }
   }
 
+  bool initialized = false;
+
   void setup() {
     motionManager.subscribe();
-    for (int i = 0; i < PANEL_COUNT; ++i) {
-      if(!pixelDust[i]->begin()) {
-        logf("PixelDust init failed");
+    if (!initialized) {
+      // pixelDust->begin looks like it can be called multiple times, but it cannot.
+      initialized = true;
+      for (int i = 0; i < PANEL_COUNT; ++i) {
+        if(!pixelDust[i]->begin()) {
+          logf("PixelDust init failed");
+        }
       }
+    }
+    for (int i = 0; i < PANEL_COUNT; ++i) {
       pixelDust[i]->randomize();
     }
 

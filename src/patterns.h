@@ -438,9 +438,6 @@ private:
 public:
   const int kBlobCount = 16;
   const int kBlobsResetTimeout = 5000;
-  int prevOrientation;
-  float rotationVelocity = 0;
-  const float rotationSamples = 5;
   MotionBlob *blobs;
   CRGBPalette16 palette;
   long lastDisplay = -kBlobsResetTimeout;
@@ -488,24 +485,16 @@ public:
       resetBlobs(ctx);
       lastDisplay = -1;
     }
-    
-    sensors_event_t event; 
-    motionManager.getEvent(&event);
-    
-//    logf("orientation = (%f, %f, %f)", event.orientation.x, event.orientation.y, event.orientation.z);
 
-    float orientation = event.orientation.z;
-    rotationVelocity = (rotationSamples * rotationVelocity + prevOrientation - orientation) / (rotationSamples + 1);
-    prevOrientation = orientation;
+    float orientation;
+    float twirlSpeed = fabsf(motionManager.twirlVelocity(5, &orientation));
 
-    float rotationSpeed = fabs(rotationVelocity);
-
-    if (rotationSpeed > kMotionThreshold) {
+    if (twirlSpeed > kMotionThreshold) {
       ctx.pushStyle();
-      ctx.blendMode(brighten);
+      ctx.blendMode(blendBrighten);
       for (int i = 0; i < kBlobCount; ++i) {
         MotionBlob *blob = &blobs[i];
-        blob->update(ctx, orientation, rotationSpeed);
+        blob->update(ctx, orientation, twirlSpeed);
       }
       ctx.popStyle();
       lastDisplay = millis();
@@ -545,12 +534,14 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
     prepareTrackedColors(numBars);
     
     xvelocities = new float[ctx.height];
-    xoffsets= new float[ctx.height];
+    xoffsets = new float[ctx.height];
 
     for (int i = 0 ; i < ctx.height; ++i) {
       xvelocities[i] = random8() / (255.0 * 2) + 0.75;
       xoffsets[i] = random8(8);
     }
+
+    motionManager.subscribe();
   }
 
   void stopCompleted() {
@@ -561,15 +552,19 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
     xoffsets = NULL;
 
     releaseTrackedColors();
+    motionManager.unsubscribe();
   }
   
   void update(DrawingContext &ctx) {
     ctx.leds.fill_solid(CRGB::Black);
 
-    EVERY_N_MILLISECONDS(20) {
+    EVERY_N_MILLISECONDS(40) {
       shiftTrackedColors(1);
     }
     
+    const int rotationSamples = 20;
+    float rotationVelocity = motionManager.twirlVelocity(rotationSamples);
+
     ctx.pushStyle();
     ctx.drawStyle.wrap = true;
     
@@ -578,15 +573,15 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
         if (addmod8(x, y, 2) == 0) {
           continue;
         }
-        int row_startx = (y & 1 ? xoffsets[y]: -xoffsets[y]);
+        float row_startx = (y & 1 ? xoffsets[y] : -xoffsets[y]);
         
-        int x1 = row_startx + x*kBarWidth;
-        int x2 = row_startx + (x+1)*kBarWidth - 1;
+        float x1 = row_startx + x*kBarWidth;
+        float x2 = row_startx + (x+1)*kBarWidth - 1;
 
         CRGB color = getTrackedColor(y * ctx.width / kBarWidth / 2 + x / 2);
-        ctx.line(x1, y, x2, y, color);
+        ctx.line(x1, y, x2, y, color, true);
       }
-      xoffsets[y] += xvelocities[y] * frameTime() / 30.0;
+      xoffsets[y] += xvelocities[y] * frameTime() / 30.0 * rotationVelocity;
       if (xoffsets[y] > ctx.width) {
         xoffsets[y] -= ctx.width;
       }

@@ -47,6 +47,23 @@ public:
   void getEvent(sensors_event_t *event) {
     bno.getEvent(event);
   }
+private:
+  float twirlVelocityAccum;
+  float prevXOrientation;
+public:
+  float twirlVelocity(int samples, float *outOrientation=NULL) {
+    sensors_event_t event;
+    getEvent(&event);
+
+    float orientation = event.orientation.x;
+    if (outOrientation) {
+      *outOrientation = orientation;
+    }
+    twirlVelocityAccum = (samples * twirlVelocityAccum + MOD_DISTANCE(prevXOrientation, orientation, 360)) / (samples + 1);
+    prevXOrientation = orientation;
+
+    return twirlVelocityAccum;
+  }
 
   void printStatus() {
     uint8_t system, gyro, accel, mag;

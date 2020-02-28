@@ -41,7 +41,7 @@ Sound soundPattern;
 #endif
 
 Pattern *idlePatterns[] = {
-                            &smoothPalettes, &pixelDust, &barsPattern, &oscillatorsPattern,
+                            &smoothPalettes, &pixelDust, &barsPattern, &oscillatorsPattern, 
 #if USE_AUDIO
                             &soundPattern
 #endif

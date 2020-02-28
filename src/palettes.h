@@ -543,7 +543,7 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
   Coral_reef_gp,
   es_ocean_breeze_068_gp,
   es_pinksplash_07_gp,
-  es_vintage_01_gp,
+  es_vintage_01_gp, //10
   departure_gp,
   es_landscape_64_gp,
   es_landscape_33_gp,
@@ -553,7 +553,7 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
   GMT_drywet_gp,
   ib_jul01_gp,
   es_vintage_57_gp,
-  ib15_gp,
+  ib15_gp,  // 20
   Fuschia_7_gp,
   es_emerald_dragon_08_gp,
   lava_gp,
@@ -563,7 +563,7 @@ const TProgmemRGBGradientPalettePtr gGradientPalettes[] = {
   Pink_Purple_gp,
   es_autumn_19_gp,
   BlacK_Blue_Magenta_White_gp,
-  BlacK_Magenta_Red_gp,
+  BlacK_Magenta_Red_gp, // 30
   BlacK_Red_Magenta_Yellow_gp,
   Blue_Cyan_Yellow_gp,
   Trans_Flag_gp

@@ -38,7 +38,7 @@ void logf(const char *format, ...)
   free(buf);
 }
 
-#define MOD_DISTANCE(a, b, m) (abs(m / 2. - fmod((3 * m) / 2 + a - b, m)))
+#define MOD_DISTANCE(a, b, m) (m / 2. - fmod((3 * m) / 2 + a - b, m))
 
 inline int mod_wrap(int x, int m) {
   int result = x % m;

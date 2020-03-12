@@ -7,7 +7,7 @@
 // end FIXME
 
 #define DEBUG 1
-#define WAIT_FOR_SERIAL 1
+#define WAIT_FOR_SERIAL 0
 #define USE_AUDIO 1
 
 #include <FastLED.h>
@@ -52,10 +52,10 @@ Pattern *activePattern = NULL;
 Pattern *lastPattern = NULL;
 
 /* ---- Test Options ---- */
-const bool kTestPatternTransitions = true;
-const int kIdlePatternTimeout = 1000 * (kTestPatternTransitions ? 20 : 60 * 2);
+const bool kTestPatternTransitions = false;
+const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-Pattern *testIdlePattern = NULL;//&barsPattern;
+Pattern *testIdlePattern = NULL;//&pixelDust;
 
 /* ---------------------- */
 
@@ -180,7 +180,7 @@ void loop() {
   }
 
   // time out idle patterns
-  if (activePattern != NULL && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {
+  if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {
     if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
       activePattern->lazyStop();
       lastPattern = activePattern;
@@ -202,9 +202,18 @@ void loop() {
       activePattern = nextPattern;
     }
   }
-  
+   
   applyBrightnessSettings();
   
+  // Rotate Panel 0 since it's mounted upside down
+  CRGBArray<PANEL_LEDS> panelCopy;
+  panelCopy = leds(0, PANEL_LEDS-1);
+  for (int x = 0; x < PANEL_WIDTH; ++x) {
+    for (int y = 0; y < PANEL_HEIGHT; ++y) {
+      leds[ledxy(x,y)] = panelCopy[ledxy(PANEL_WIDTH-x-1, PANEL_HEIGHT-y-1)];
+    }
+  }
+
   FastLED.show();
   
   fc.tick();

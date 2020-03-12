@@ -728,15 +728,23 @@ public:
     sensors_event_t linear_accel;
     motionManager.bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
     motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
-
     float jerkFactor = 2.0;
 
-    for (int i = 0; i < PANEL_COUNT; ++i) {
-      pixelDust[i]->iterate(
-                    1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x),
-                   -1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y), 
-                    1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z));
-    }
+    // Z through board
+    // X vertical with text
+    // Y horizontal along board
+
+    // TODO: May need to apply a small correction factor to Z to account for the board not sitting perfectly vertical on the belt/my back
+
+    pixelDust[0]->iterate(
+                 -1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z),
+                  1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
+                  1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y));
+    
+    pixelDust[1]->iterate(
+                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z),
+                  1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
+                  1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y));
 
     leds.fill_solid(CRGB::Black);
 

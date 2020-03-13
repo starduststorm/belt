@@ -1,4 +1,3 @@
-
 #if USE_AUDIO
 
 #ifndef AUDIO_MANAGER_H
@@ -17,15 +16,13 @@ AudioConnection          patchCord2(amp1, fft1024_1);
 AudioConnection          patchCord3(amp1, peak1);
 // GUItool: end automatically generated code
 
-#define BAND_COUNT PANEL_WIDTH + 2 // FIXME: for some reason the first two fft bins are bogus?
+#define RAW_FFT_BANDS 512
 
-class AudioManager {
+class FFTProcessing {
+  int *fftBinSizes;
+  float *levels;
+  float *levelsAccum;
 private:
-  float gain = 10.0; // FIXME: make this dynamic
-
-  int fftBinSizes[BAND_COUNT];
-  const int totalBins = 512;
-  
   // https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands
   float FindE(int bands, int bins) {
     float increment = 0.1, eTest, n;
@@ -42,18 +39,19 @@ private:
         eTest -= increment;   // Revert back to previous calculation increment
         increment /= 10.0;    // Get a finer detailed calculation & increment a decimal point lower
       }
-      else if (count == bins)   // We found the correct E
-        return eTest;       // Return calculated E
+      else if (count == bins)
+        return eTest;
       if (increment < 0.0000001)        // Ran out of calculations. Return previous E. Last bin will be lower than (bins-1)
         return (eTest - increment);
     }
-    return 0;                 // Return error 0
+    return 0;
   }
   
   void getFFTBins(int bands, int bins, int *fftBins) {
-    float e = FindE(bands, bins);
+    const int binStartOffset = 2; // HACK: For some reason the first two FFT bins are garbage
+    float e = FindE(bands, bins - binStartOffset);
     if (e) {
-      int count = 0;
+      int count = binStartOffset;
       Serial.printf("E = %4.4f\n", e);
       for (int b = 0; b < bands; b++) {
         float n = pow(e, b);
@@ -68,16 +66,76 @@ private:
       Serial.println("Error\n");
     }
   }
+
+public:
+  const int fftNumBins;
+  FFTProcessing(int numBins) : fftNumBins(numBins) {
+    fftBinSizes = new int[fftNumBins];
+    levels = new float[fftNumBins];
+    levelsAccum = new float[fftNumBins];
+    bzero(levelsAccum, fftNumBins * sizeof(levelsAccum[0]));
+
+    getFFTBins(fftNumBins, RAW_FFT_BANDS, fftBinSizes);
+  }
+  ~FFTProcessing() {
+    delete [] fftBinSizes;
+    delete [] levels;
+    delete [] levelsAccum;
+  }
+
+  bool fftAvailable() {
+    return fft1024_1.available();
+  }
+
+  const float *fftLevels(unsigned int avgSamples=0) {
+    for (int i = 0; i < fftNumBins; i++) {
+      int stopIndex = (i < fftNumBins - 1 ? fftBinSizes[i + 1] - 1 : RAW_FFT_BANDS - 1);
+      levels[i] = fft1024_1.read(fftBinSizes[i], stopIndex);
+      if (avgSamples != 0) {
+        levelsAccum[i] = (levelsAccum[i] * avgSamples + levels[i]) / (float)(avgSamples + 1);
+      }
+    }
     
+    return (avgSamples == 0 ? levels : levelsAccum);
+  }
+
+  void fftLog() {
+    const float *levels = fftLevels();
+    for (int x = 0; x < fftNumBins; ++x) {
+      float level = levels[x];
+      if (level >= 0.01) {
+        Serial.print(level);
+        Serial.print(" ");
+      } else {
+        Serial.print("  -  "); // don't print "0.00"
+      }
+      Serial.println();
+    }
+  }
+
+  void fftLogRaw() {
+    for (int x = 0; x < RAW_FFT_BANDS; ++x) {
+      float level = fft1024_1.read(x);
+      if (level >= 0.01) {
+        Serial.print(level);
+        Serial.print(" ");
+      } else {
+        Serial.print("  -  "); // don't print "0.00"
+      }
+      Serial.println();
+    }
+  }
+};
+
+class AudioManager {
+private:
+  float gain = 10.0; // FIXME: make this dynamic
+
 public:
   AudioManager() {
     AudioMemory(12);
     fft1024_1.windowFunction(AudioWindowHanning1024);
-
     amp1.gain(gain);
-    if (fftBinSizes[PANEL_WIDTH-1] == 0) {
-      getFFTBins(BAND_COUNT, totalBins, fftBinSizes);
-    }
   }
 
   void subscribe() {
@@ -88,35 +146,6 @@ public:
     // FIXME: need a way to disable or pause fft, but may need to patch the audio library
   }
 
-  bool available() {
-    return fft1024_1.available();
-  }
-
-  float levels[BAND_COUNT];
-  float *getLevels() {  
-    for (int i = 0; i < BAND_COUNT; i++) {
-      if (i < PANEL_WIDTH - 1) {
-        levels[i] = fft1024_1.read(fftBinSizes[i], fftBinSizes[i + 1] - 1);
-      } else {
-        levels[i] = fft1024_1.read(fftBinSizes[i], totalBins - 1);
-      }
-    }
-    return levels;
-  }
-
-  void printFFT() {
-    float *levels = getLevels();
-    assert(BAND_COUNT == PANEL_WIDTH+2, "Expected to have more bands than panel_width");
-    for (int x = 0; x < PANEL_WIDTH; ++x) {
-      float level = levels[x+2];
-      if (level >= 0.01) {
-        Serial.print(level);
-        Serial.print(" ");
-      } else {
-        Serial.print("  -  "); // don't print "0.00"
-      }
-    }
-  }
   void printStatistics() {
     // print a summary of the current & maximum usage
     Serial.print("CPU: ");

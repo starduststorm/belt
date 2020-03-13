@@ -326,18 +326,19 @@ class Bits : public Pattern {
 
 #define EXTRA_GAIN 200
 
-class Sound: public Pattern, public PaletteRotation<CRGBPalette256> {
+class Sound: public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
 private:
+  static const int fftBinCount = PANEL_WIDTH;
   int framesWithoutAudioData = 0;
-  float levelsAccum[BAND_COUNT];
-  float *levels = NULL;
+  // float levelsAccum[fftBinCount];
+  const float *levels = NULL;
   bool upsideDown = false;
 public:
-  Sound() : PaletteRotation(allowBlack=false) {
+  Sound() : PaletteRotation(allowBlack=false), FFTProcessing(fftBinCount) {
   }
   
   void setup() {
-    bzero(levelsAccum, sizeof(levelsAccum));
+    // bzero(levelsAccum, sizeof(levelsAccum));
     audioManager.subscribe();
     upsideDown = (random8(2) == 0);
   }
@@ -350,30 +351,23 @@ public:
   void update(CRGBArray<NUM_LEDS> &leds) {
     leds.fill_solid(CRGB::Black);
     
-    const int bandRunningAvgCount = 4;
-    if (audioManager.available()) {
+    if (fftAvailable()) {
       if (framesWithoutAudioData > 0) {
 //          logf("Went %i frames without audio data", framesWithoutAudioData);
         framesWithoutAudioData = 0;
       }
       
-      levels = audioManager.getLevels();
-      for (int i = 0; i < BAND_COUNT; ++i) {
-        levels[i] *= EXTRA_GAIN;
-      }
+      levels = fftLevels(4);
     } else {
       framesWithoutAudioData++;
     }
     if (levels != NULL) {
-      for (int x = 0; x < PANEL_WIDTH; ++x) {
-        float level = levels[x+2];
-        
-        levelsAccum[x] = (levelsAccum[x] * bandRunningAvgCount + level) / (float)(bandRunningAvgCount + 1);
-        
+      for (int x = 0; x < min(fftBinCount, PANEL_WIDTH); ++x) {
+        float level = levels[x] * EXTRA_GAIN;
         // Just draw the same thing to both panels for now
         for (int p = 0; p < PANEL_COUNT; ++p) {
-          for (int y = 0; y <= levelsAccum[x] && y < PANEL_HEIGHT; ++y) {
-            char bright = min(0xFF, (levelsAccum[x] - y) * 0xFF);
+          for (int y = 0; y <= level && y < PANEL_HEIGHT; ++y) {
+            char bright = min(0xFF, (level - y) * 0xFF);
 //            CRGB color = CHSV(20 * y, 0xFF, bright); // rainbow            
             CRGB color = getPaletteColor(map(y, 0, PANEL_HEIGHT-1, 0, 0xFF));
             color.nscale8_video(bright);
@@ -601,10 +595,30 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-class Oscillators : public Pattern {
+class Oscillators : public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
+  static const int fftBins = 5;
+  float offset = 0;
+  bool usePalette;
+  float fftHistory[fftBins][PANEL_HEIGHT];
+public:
+  Oscillators() : FFTProcessing(fftBins) {
+    secondsPerPalette = 30;
+  }
+
+  void setup(DrawingContext &ctx) {
+    motionManager.subscribe();
+    audioManager.subscribe();
+    usePalette = random8(2) == 0;
+  }
+
+  void stopCompleted() {
+    Pattern::stopCompleted();
+    motionManager.unsubscribe();
+    audioManager.unsubscribe();
+  }
+
   void update(DrawingContext &ctx) {
     for (int index = 0; index < ctx.width * ctx.height; ++index) {
-      
       // this looks cool for a good long time
 //      int r = 0;//beatsin16(millis() / 15 + 5 * index) >> 8;
 //      int g = beatsin16(millis() / 10 + 10 * index) >> 8;
@@ -616,12 +630,29 @@ class Oscillators : public Pattern {
 //      ctx.leds[index] = color;
     }
 
+    // float offset = millis() / 2.;
+    offset += motionManager.twirlVelocity(20);
+    const float *levels = fftLevels(5);
+    EVERY_N_MILLIS(32) {
+      for (int i = 0; i < fftBins; ++i) {
+        for (int y = PANEL_HEIGHT - 1; y > 0; --y) {
+          fftHistory[i][y] = fftHistory[i][y-1];
+        }
+      }
+    }
+    for (int i = 0; i < fftBins; ++i) {
+      fftHistory[i][0] = levels[i];
+    }
     for (int x = 0; x < ctx.width; ++x) {
       for (int y = 0; y < ctx.height; ++y) {
-        CHSV color = CHSV(100, 0xFF, sin8(millis()/2. + x*40 + beatsin8(30)*y));// + beatsin8(30, 20, 0xFF - 20*7));
+        int phase = 10 * offset + x*40 + 4*offset*y;
+        float bucket = fmod_wrap(phase / 255., fftBins);
+        CRGB color = CHSV(255/fftBins * bucket - 20, 0xFF, dim8_video(sin8(phase)));
+        color.nscale8_video(min(0xFF, fftHistory[(int)bucket % fftBins][y] * 3 * 0xFF));
         ctx.point(x, y, color);
       }
     }
+    offset *= 0.98;
     if (isStopping()) {
       stopCompleted();
     }

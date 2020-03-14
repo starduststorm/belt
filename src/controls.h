@@ -1,29 +1,13 @@
 #ifndef CONTROLS_H
 #define CONTROLS_H
 
-#define THUMBDIAL1_PIN A8
-#define THUMBDIAL2_PIN A2
-#define BUTTON_PIN 0
+#include <vector>
 
-#define THUMBDIAL_THRESHOLD 40
-
-#include <FastLED.h>
-
-class Controls {
-private:
-  long buttonDownTime = -1;
-  long buttonUpTime = -1;
-  long singlePressTime = -1;
-  bool waitForButtonUp = false;
-  
-  void (*singlePressHandler)(void);
-  void (*doublePressHandler)(void);
-  void (*longPressHandler)(void);
-  void (*doubleLongPressHandler)(void);
-
-  void (*thumbdial1Handler)(int);
-  void (*thumbdial2Handler)(int);
-
+class HardwareControl {
+  friend class HardwareControls;
+protected:
+  virtual void update() = 0;
+  int pin;
   void handleHandler(void (*handler)(void)) {
     if (handler) {
       (*handler)();
@@ -35,42 +19,63 @@ private:
     if (handler) {
       (*handler)(arg);
     }
-  }  
-
-  // FIXME: generalize
-  int lastThumbdial1 = -1;
-  int lastThumbdial2 = -1;
-
-  unsigned long lastThumbdial1Change = -1;
-  unsigned long lastThumbdial2Change = -1;
-  
-public:
-  long longPressInterval = 1000;
-  long doublePressInterval = 400;
-
-  Controls() {
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
   }
+public:
+  HardwareControl(int pin) : pin(pin) {};
+  virtual ~HardwareControl() {};
+};
+
+/* ------------------ s*/
+
+class AnalogDial : public HardwareControl {
+  void (*changeHandler)(int);
+  int lastValue = -1;
+  unsigned long lastChange;
 
   void update() {
-    // TODO: generalize all this for different hardware layouts
-
-    int thumbdial1 = analogRead(THUMBDIAL1_PIN);
-    // potentiometer reads are noisy, jitter is around ±30 or so. 
+    int thumbdial1 = analogRead(pin);
+    // potentiometer reads are noisy, jitter may be around ±30 or so. 
     // Wait for significant change to notify the handler, but then still allow smooth updates as the pot is turned
-    bool significantChange = abs(lastThumbdial1 - thumbdial1) > THUMBDIAL_THRESHOLD;
-    bool recentSignificantChange = (millis() - lastThumbdial1Change < 500);
-    bool endpointsChange = lastThumbdial1 != thumbdial1 && (thumbdial1 == 0 || thumbdial1 == 1023);
+    bool significantChange = abs(lastValue - thumbdial1) > updateThreshold;
+    bool recentSignificantChange = (millis() - lastChange < smoothUpdateDuration);
+    bool endpointsChange = lastValue != thumbdial1 && (thumbdial1 == 0 || thumbdial1 == 1023);
     
     if (significantChange || recentSignificantChange || endpointsChange) {
       if (significantChange || endpointsChange) {
-        lastThumbdial1Change = millis();
-        lastThumbdial1 = thumbdial1;
+        lastChange = millis();
+        lastValue = thumbdial1;
       }
-      handleHandler(thumbdial1Handler, thumbdial1);
+      handleHandler(changeHandler, thumbdial1);
     }
+  }
 
-    bool buttonPressed = digitalRead(BUTTON_PIN) == LOW;
+public:
+  int updateThreshold = 40; // Value threshold to suppress jitter in the thumbdial
+  unsigned smoothUpdateDuration = 500; // Duration (ms) to call handler on every change after threshold is met
+
+  AnalogDial(int pin) : HardwareControl(pin) {
+  }
+
+  void onChange(void (*handler)(int)) {
+    changeHandler = handler;
+  }
+};
+
+/* ----------------------- */
+
+class SPSTButton : public HardwareControl {
+  long buttonDownTime = -1;
+  long buttonUpTime = -1;
+  long singlePressTime = -1;
+  bool waitForButtonUp = false;
+  
+  void (*singlePressHandler)(void);
+  void (*doublePressHandler)(void);
+  void (*longPressHandler)(void);
+  void (*doubleLongPressHandler)(void);
+
+  void update() {
+    bool buttonPressed = digitalRead(pin) == LOW;
     long readTime = millis();
 
     if (waitForButtonUp) {
@@ -113,6 +118,14 @@ public:
     }
   }
 
+public:
+  long longPressInterval = 1000;
+  long doublePressInterval = 400;
+
+  SPSTButton(int pin) : HardwareControl(pin) {
+    pinMode(pin, INPUT_PULLUP);
+  }
+
   void onSinglePress(void (*handler)(void)) {
     singlePressHandler = handler;
   }
@@ -128,13 +141,34 @@ public:
   void onDoubleLongPress(void (*handler)(void)) {
     doubleLongPressHandler = handler;
   }
+};
 
-  void onThumbdial1(void (*handler)(int)) {
-    thumbdial1Handler = handler;
+/* --------------------- */
+
+class HardwareControls {
+private:
+  std::vector<HardwareControl *> controlsVec;
+public:
+  ~HardwareControls() {
+    controlsVec.clear();
   }
 
-  void onThumbdial2(void (*handler)(int)) {
-    thumbdial2Handler = handler;
+  SPSTButton *addButton(int pin) {
+    SPSTButton *button = new SPSTButton(pin);
+    controlsVec.push_back(button);
+    return button;
+  }
+
+  AnalogDial *addAnalogDial(int pin) {
+    AnalogDial *dial = new AnalogDial(pin);
+    controlsVec.push_back(dial);
+    return dial;
+  }
+
+  void update() {
+    for (HardwareControl *control : controlsVec) {
+      control->update();
+    }
   }
 };
 

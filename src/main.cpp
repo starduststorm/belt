@@ -64,7 +64,7 @@ Pattern *testIdlePattern = NULL;
 
 unsigned long lastTrigger = 0;
 FrameCounter fc;
-Controls controls;
+HardwareControls controls;
 
 #define UNCONNECTED_PIN_1 A9
 #define UNCONNECTED_PIN_2 A3
@@ -91,6 +91,10 @@ int lsb_noise(int pin, int numbits) {
   return noise;
 }
 
+#define THUMBDIAL1_PIN A8
+#define THUMBDIAL2_PIN A2
+#define BUTTON_PIN 0
+
 void buttonSinglePress() {
   logf("single press!");
   // TODO: make deterministic?
@@ -116,7 +120,7 @@ void buttonDoubleLongPress() {
 }
 
 static uint8_t globalBrightness = 0xFF;
-void thumbdial1(int val) {
+void thumbdial1Change(int val) {
   val = map(val, 1023, 0, 0, 0xFF);
   globalBrightness = val;
 }
@@ -150,11 +154,15 @@ void setup() {
   drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
 
   fc.tick();
-  controls.onSinglePress(&buttonSinglePress);
-  controls.onDoublePress(&buttonDoublePress);
-  controls.onLongPress(&buttonLongPress);
-  controls.onDoubleLongPress(&buttonDoubleLongPress);
-  controls.onThumbdial1(&thumbdial1);
+  SPSTButton *button = controls.addButton(BUTTON_PIN);
+  button->onSinglePress(&buttonSinglePress);
+  button->onDoublePress(&buttonDoublePress);
+  button->onLongPress(&buttonLongPress);
+  button->onDoubleLongPress(&buttonDoubleLongPress);
+
+  AnalogDial *brightnessDial = controls.addAnalogDial(THUMBDIAL1_PIN);
+  brightnessDial->onChange(&thumbdial1Change);
+  
   controls.update();
 
   setupDoneTime = millis();

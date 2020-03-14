@@ -55,9 +55,10 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-// Pattern *testIdlePattern = NULL;
-Pattern *testIdlePattern = &oscillatorsPattern;
+Pattern *testIdlePattern = NULL;
+// Pattern *testIdlePattern = &oscillatorsPattern;
 // Pattern *testIdlePattern = &soundPattern;
+// Pattern *testIdlePattern = &barsPattern;
 
 /* ---------------------- */
 

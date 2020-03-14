@@ -5,6 +5,8 @@
 #define THUMBDIAL2_PIN A2
 #define BUTTON_PIN 0
 
+#define THUMBDIAL_THRESHOLD 40
+
 #include <FastLED.h>
 
 class Controls {
@@ -27,7 +29,7 @@ private:
       (*handler)();
     }
   }
-  
+
   template<typename T>
   void handleHandler(void (*handler)(T), T arg) {
     if (handler) {
@@ -38,6 +40,9 @@ private:
   // FIXME: generalize
   int lastThumbdial1 = -1;
   int lastThumbdial2 = -1;
+
+  unsigned long lastThumbdial1Change = -1;
+  unsigned long lastThumbdial2Change = -1;
   
 public:
   long longPressInterval = 1000;
@@ -48,9 +53,20 @@ public:
   }
 
   void update() {
-    // TODO: move dials to handlers, generalize all this for different hardware layouts
+    // TODO: generalize all this for different hardware layouts
+
     int thumbdial1 = analogRead(THUMBDIAL1_PIN);
-    if (thumbdial1 != lastThumbdial1) {
+    // potentiometer reads are noisy, jitter is around ±30 or so. 
+    // Wait for significant change to notify the handler, but then still allow smooth updates as the pot is turned
+    bool significantChange = abs(lastThumbdial1 - thumbdial1) > THUMBDIAL_THRESHOLD;
+    bool recentSignificantChange = (millis() - lastThumbdial1Change < 500);
+    bool endpointsChange = lastThumbdial1 != thumbdial1 && (thumbdial1 == 0 || thumbdial1 == 1023);
+    
+    if (significantChange || recentSignificantChange || endpointsChange) {
+      if (significantChange || endpointsChange) {
+        lastThumbdial1Change = millis();
+        lastThumbdial1 = thumbdial1;
+      }
       handleHandler(thumbdial1Handler, thumbdial1);
     }
 

@@ -19,11 +19,25 @@ private:
   void (*longPressHandler)(void);
   void (*doubleLongPressHandler)(void);
 
+  void (*thumbdial1Handler)(int);
+  void (*thumbdial2Handler)(int);
+
   void handleHandler(void (*handler)(void)) {
     if (handler) {
       (*handler)();
     }
+  }
+  
+  template<typename T>
+  void handleHandler(void (*handler)(T), T arg) {
+    if (handler) {
+      (*handler)(arg);
+    }
   }  
+
+  // FIXME: generalize
+  int lastThumbdial1 = -1;
+  int lastThumbdial2 = -1;
   
 public:
   long longPressInterval = 1000;
@@ -35,8 +49,10 @@ public:
 
   void update() {
     // TODO: move dials to handlers, generalize all this for different hardware layouts
-    int brightness = map(analogRead(THUMBDIAL1_PIN), 1023, 0, 0, 0xFF);
-    LEDS.setBrightness(brightness);
+    int thumbdial1 = analogRead(THUMBDIAL1_PIN);
+    if (thumbdial1 != lastThumbdial1) {
+      handleHandler(thumbdial1Handler, thumbdial1);
+    }
 
     bool buttonPressed = digitalRead(BUTTON_PIN) == LOW;
     long readTime = millis();
@@ -95,6 +111,14 @@ public:
 
   void onDoubleLongPress(void (*handler)(void)) {
     doubleLongPressHandler = handler;
+  }
+
+  void onThumbdial1(void (*handler)(int)) {
+    thumbdial1Handler = handler;
+  }
+
+  void onThumbdial2(void (*handler)(int)) {
+    thumbdial2Handler = handler;
   }
 };
 

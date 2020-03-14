@@ -577,17 +577,20 @@ const uint8_t gGradientPaletteCount =
 /* --- */
 
 
-static bool isBlack(CRGB color) {
+static int linearBrightness(CRGB color) {
   // I'm looking at you fire_gp
-  return (color.r + color.g + color.b < 3);
+  return (color.r + color.g + color.b);
 }
 
 template <class T>
 class PaletteManager {
 private:
-  bool paletteHasBlack(T palette) {
+  bool paletteHasColorBelowThreshold(T palette, uint8_t minBrightness) {
+    if (minBrightness == 0) {
+      return false;
+    }
     for (uint16_t i = 0; i < sizeof(T)/3; ++i) {
-      if (isBlack(palette.entries[i])) {
+      if (linearBrightness(palette.entries[i]) < minBrightness) {
         return true;
       }
     }
@@ -601,23 +604,18 @@ public:
     return gGradientPalettes[choice];
   }
   
-  T nonBlackPalette() {
+  T randomPalette(uint8_t minBrightness=0) {
     unsigned choice;
     T palette;
-    bool hasBlack;
+    bool belowMinBrightness;
+    int tries = 0;
     do {
       choice = random16(gGradientPaletteCount);
       palette = gGradientPalettes[choice];
-      hasBlack = paletteHasBlack(palette);
-    } while (hasBlack);
+      belowMinBrightness = paletteHasColorBelowThreshold(palette, minBrightness);
+    } while (belowMinBrightness && tries++ < 10);
+    assert(tries < 10, "Tried too many times to pick a palette below threshold");
     logf("Picked Palette %u", choice);
-    return palette;
-  }
-  
-  T randomPalette() {
-    unsigned choice = random16(gGradientPaletteCount);
-    logf("Picked Palette %u", choice);
-    T palette = gGradientPalettes[choice];
     return palette;
   }
 };
@@ -665,18 +663,15 @@ private:
   uint8_t colorIndexCount = 0;
 
   T choosePalette() {
-    if (allowBlack) {
-      return manager.randomPalette();
-    }
-    return manager.nonBlackPalette();
+    return manager.randomPalette(minBrightness);
   }
 
 public:
   int secondsPerPalette = 10;
-  bool allowBlack = true;
+  uint8_t minBrightness = 0;
   
-  PaletteRotation(bool allowBlack=true) {
-    this->allowBlack = allowBlack;
+  PaletteRotation(int minBrightness=0) {
+    this->minBrightness = minBrightness;
     currentPalette = choosePalette();
     targetPalette = choosePalette();
   }
@@ -706,7 +701,7 @@ public:
     }
     T palette = getPalette();
     CRGB color = ColorFromPalette(palette, colorIndexes[n]);
-    while (!allowBlack && isBlack(color)) {
+    while (linearBrightness(color) < minBrightness) {
       colorIndexes[n] = addmod8(colorIndexes[n], 1, 0xFF);
       color = ColorFromPalette(palette, colorIndexes[n]);
     }

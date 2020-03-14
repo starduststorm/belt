@@ -334,7 +334,7 @@ private:
   const float *levels = NULL;
   bool upsideDown = false;
 public:
-  Sound() : PaletteRotation(allowBlack=false), FFTProcessing(fftBinCount) {
+  Sound() : PaletteRotation(minBrightness=10), FFTProcessing(fftBinCount) {
   }
   
   void setup() {
@@ -595,14 +595,14 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-class Oscillators : public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
+class Oscillators : public Pattern, public PaletteRotation<CRGBPalette16>, public FFTProcessing {
   static const int fftBins = 5;
   float offset = 0;
   bool usePalette;
   float fftHistory[fftBins][PANEL_HEIGHT];
 public:
-  Oscillators() : FFTProcessing(fftBins) {
-    secondsPerPalette = 30;
+  Oscillators() : PaletteRotation(minBrightness=10), FFTProcessing(fftBins) {
+    secondsPerPalette = 20;
   }
 
   void setup(DrawingContext &ctx) {
@@ -633,6 +633,7 @@ public:
     // float offset = millis() / 2.;
     offset += motionManager.twirlVelocity(20);
     const float *levels = fftLevels(5);
+
     EVERY_N_MILLIS(32) {
       for (int i = 0; i < fftBins; ++i) {
         for (int y = PANEL_HEIGHT - 1; y > 0; --y) {
@@ -645,10 +646,20 @@ public:
     }
     for (int x = 0; x < ctx.width; ++x) {
       for (int y = 0; y < ctx.height; ++y) {
-        int phase = 10 * offset + x*40 + 4*offset*y;
-        float bucket = fmod_wrap(phase / 255., fftBins);
-        CRGB color = CHSV(255/fftBins * bucket - 20, 0xFF, dim8_video(sin8(phase)));
-        color.nscale8_video(min(0xFF, fftHistory[(int)bucket % fftBins][y] * 3 * 0xFF));
+        int phase = 10 * offset + x*39 + 4*offset*y;
+        float bucket = fmod_wrap((phase+64) / 255., fftBins);
+        uint8_t colorIndex = 255./fftBins * (int)bucket;
+        CRGB color;
+        if (usePalette) {
+          color = getPaletteColor(colorIndex);
+        } else {
+          color = CHSV(colorIndex, 0xFF, 0xFF);
+        }
+        
+        color.nscale8_video(min(0xFF, scale8(dim8_video(sin8(phase)), fftHistory[(int)bucket % fftBins][y] * 1 * 0xFF)));
+        if (color.r + color.g + color.b < 3) {
+          color = CRGB::Black;
+        }
         ctx.point(x, y, color);
       }
     }
@@ -723,7 +734,7 @@ private:
   static const unsigned int numParticles = 50;
   Adafruit_PixelDust *pixelDust[PANEL_COUNT];
 public:
-  PixelDust() : PaletteRotation(allowBlack=false){
+  PixelDust() : PaletteRotation(minBrightness=3) {
     for (int i = 0; i < PANEL_COUNT; ++i) {
       pixelDust[i] = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 101, false);
     }

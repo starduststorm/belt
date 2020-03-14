@@ -55,8 +55,8 @@ Pattern *lastPattern = NULL;
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-Pattern *testIdlePattern = NULL;
-// Pattern *testIdlePattern = &oscillatorsPattern;
+// Pattern *testIdlePattern = NULL;
+Pattern *testIdlePattern = &oscillatorsPattern;
 // Pattern *testIdlePattern = &soundPattern;
 
 /* ---------------------- */
@@ -114,8 +114,14 @@ void buttonDoubleLongPress() {
   logf("double long press");
 }
 
-bool serialTimeout = false;
-unsigned long setupDoneTime;
+static uint8_t globalBrightness = 0xFF;
+void thumbdial1(int val) {
+  val = map(val, 1023, 0, 0, 0xFF);
+  globalBrightness = val;
+}
+
+static bool serialTimeout = false;
+static unsigned long setupDoneTime;
 
 void setup() {
   Serial.begin(57600);
@@ -147,6 +153,7 @@ void setup() {
   controls.onDoublePress(&buttonDoublePress);
   controls.onLongPress(&buttonLongPress);
   controls.onDoubleLongPress(&buttonDoubleLongPress);
+  controls.onThumbdial1(&thumbdial1);
   controls.update();
 
   setupDoneTime = millis();
@@ -224,13 +231,18 @@ void loop() {
 }
 
 void applyBrightnessSettings() {
-    static long firstLoopMillis = 0;
+  static long firstLoopMillis = 0;
   const long fadeInTime = 2000;
   if (firstLoopMillis == 0) {
     firstLoopMillis = millis();
   }
+
   long earlyRunTime = firstLoopMillis + fadeInTime - millis();
+  uint8_t earlyDimming = 0xFF;
   if (earlyRunTime > 0) {
-    leds.fadeLightBy(0xFF * earlyRunTime / (float)fadeInTime);
+    earlyDimming = 0xFF * earlyRunTime / (float)fadeInTime;
   }
+  uint8_t totalBrightness = scale8(globalBrightness, earlyDimming);
+  LEDS.setBrightness(totalBrightness);
+  // leds.fadeLightBy(0xFF - totalBrightness);
 }

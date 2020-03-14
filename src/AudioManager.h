@@ -49,12 +49,12 @@ private:
   
   void getFFTBins(int bands, int bins, int *fftBins) {
     const int binStartOffset = 2; // HACK: For some reason the first two FFT bins are garbage
-    float e = FindE(bands, bins - binStartOffset);
+    float e = FindE(bands + 1, bins - binStartOffset);
     if (e) {
       int count = binStartOffset;
       Serial.printf("E = %4.4f\n", e);
       for (int b = 0; b < bands; b++) {
-        float n = pow(e, b);
+        float n = pow(e, b+1);
         int d = int(n + 0.5);
         Serial.printf( "%4d ", count);
         fftBins[b] = count;

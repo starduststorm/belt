@@ -240,7 +240,7 @@ void applyBrightnessSettings() {
   long earlyRunTime = firstLoopMillis + fadeInTime - millis();
   uint8_t earlyDimming = 0xFF;
   if (earlyRunTime > 0) {
-    earlyDimming = 0xFF * earlyRunTime / (float)fadeInTime;
+    earlyDimming = 0xFF - 0xFF * earlyRunTime / (float)fadeInTime;
   }
   uint8_t totalBrightness = scale8(globalBrightness, earlyDimming);
   LEDS.setBrightness(totalBrightness);

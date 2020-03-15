@@ -98,10 +98,14 @@ class FrameCounter {
     }
 };
 
-// lerp
-float remap(float x, float oldmin, float oldmax, float newmin, float newmax) {
-  float zero_to_one = (x-oldmin) / (oldmax-oldmin);
-  return zero_to_one*(newmax-newmin) + newmin;
+int lsb_noise(int pin, int numbits) {
+  // TODO: Use Entropy.h? Probs not needed just to randomize pattern.
+  int noise = 0;
+  for (int i = 0; i < numbits; ++i) {
+    int val = analogRead(pin);
+    noise = (noise << 1) | (val & 1);
+  }
+  return noise;
 }
 
 #endif

@@ -81,16 +81,6 @@ HardwareControls controls;
 
 void applyBrightnessSettings();
 
-int lsb_noise(int pin, int numbits) {
-  // TODO: Use Entropy.h? Probs not needed just to randomize pattern.
-  int noise = 0;
-  for (int i = 0; i < numbits; ++i) {
-    int val = analogRead(pin);
-    noise = (noise << 1) | (val & 1);
-  }
-  return noise;
-}
-
 #define THUMBDIAL1_PIN A8
 #define THUMBDIAL2_PIN A2
 #define BUTTON_PIN 0

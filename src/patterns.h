@@ -18,123 +18,63 @@
 // HACK: Creating/initializing MotionManager (and the BNO) before AudioManager (and the i2s) resolves a crashing issue
 // I don't understand why.
 MotionManager motionManager;
-#if USE_AUDIO
 AudioManager audioManager;
-#endif
 
 class Pattern {
-  protected:
-    long startTime = -1;
-    long stopTime = -1;
-    long lastUpdateTime = -1;
-    Pattern *subPattern = NULL;
+private:  
+  long startTime = -1;
+  long stopTime = -1;
+  long lastUpdateTime = -1;
+public:
+  virtual ~Pattern() { }
 
-    virtual void stopCompleted() {
-      if (!readyToStop()) {
-        logf("WARNING: stopped %s before subPattern was stopped", description());
-      }
-      logf("Stopped %s", description());
-      stopTime = -1;
-      startTime = -1;
-      if (subPattern) {
-        subPattern->stop();
-        delete subPattern;
-        subPattern = NULL;
-      }
-    }
+  void start(DrawingContext &ctx) {
+    logf("Starting %s", description());
+    startTime = millis();
+    stopTime = -1;
+    setup(ctx);
+  }
 
-    virtual Pattern *makeSubPattern() {
-      return NULL;
-    }
+  void loop(DrawingContext &ctx) {
+    update(ctx);
+    lastUpdateTime = millis();
+  }
 
-    virtual bool readyToStop() {
-      return subPattern == NULL || subPattern->isStopped();
-    }
+  virtual bool wantsToIdleStop() {
+    return true;
+  }
 
-  public:
-    virtual ~Pattern() { }
+  virtual bool wantsToRun() {
+    // for idle patterns that require microphone input and may opt not to run if there is no sound
+    return true;
+  }
 
-    virtual bool wantsToRun() {
-      // for idle patterns that require microphone input and may opt not to run if there is no sound
-      return true;
-    }
+  virtual void setup(DrawingContext &ctx) { 
+    setup();
+  }
+  virtual void setup() { }
 
-    void start(DrawingContext &ctx) {
-      if (isStopping()) {
-        stopCompleted();
-      }
-      logf("Starting %s", description());
-      startTime = millis();
-      stopTime = -1;
-      setup(ctx);
-      setup();
-      subPattern = makeSubPattern();
-      if (subPattern) {
-        subPattern->start(ctx);
-      }
-    }
+  void stop() {
+    logf("Stopping %s", description());
+    startTime = -1;
+  }
 
-    void loop(DrawingContext &ctx) {
-      update(ctx.leds);
-      update(ctx);
-      if (subPattern) {
-        subPattern->update(ctx.leds);
-        subPattern->update(ctx);
-      }
-      lastUpdateTime = millis();
-    }
+  virtual void update(DrawingContext &ctx) { }
+  
+  virtual const char *description() = 0;
 
-    // Both of these are called
-    virtual void setup(DrawingContext &ctx) { }
-    virtual void setup() { }
+public:
+  bool isRunning() {
+    return startTime != -1;
+  }
 
-    virtual bool wantsToIdleStop() {
-      return true;
-    }
+  long runTime() {
+    return startTime == -1 ? 0 : millis() - startTime;
+  }
 
-    virtual void lazyStop() {
-      if (isRunning()) {
-        logf("Stopping %s", description());
-        stopTime = millis();
-      }
-      if (subPattern) {
-        subPattern->lazyStop();
-      }
-      stopCompleted(); // FIXME: remove this whole "delayed stop" pattern
-    }
-
-    void stop() {
-      if (subPattern) {
-        subPattern->stop();
-      }
-      stopCompleted();
-    }
-
-    bool isRunning() {
-      return startTime != -1 && isStopping() == false;
-    }
-
-    bool isStopped() {
-      return !isRunning() && !isStopping();
-    }
-
-    long runTime() {
-      return startTime == -1 ? 0 : millis() - startTime;
-    }
-
-    long frameTime() {
-      return (lastUpdateTime == -1 ? 0 : millis() - lastUpdateTime);
-    }
-
-    bool isStopping() {
-      return stopTime != -1;
-    }
-
-    // One of the two of these must be implemented. Both will be called.
-    virtual void update(CRGBArray<NUM_LEDS> &leds) { }
-    virtual void update(DrawingContext &ctx) { }
-    
-    virtual const char *description() = 0;
+  long frameTime() {
+    return (lastUpdateTime == -1 ? 0 : millis() - lastUpdateTime);
+  }
 };
 
 /* --------------------------- */
@@ -229,6 +169,9 @@ class Bits : public Pattern {
     Bits(int constPreset = -1) {
       this->constPreset = constPreset;
     }
+    ~Bits() {
+      free(bits);
+    }
   private:
 
     CRGB getBitColor() {
@@ -272,7 +215,8 @@ class Bits : public Pattern {
       lastBitCreation = 0;
     }
 
-    void update(CRGBArray<NUM_LEDS> &leds) {
+    void update(DrawingContext &ctx) {
+      CRGBArray<NUM_LEDS> leds = ctx.leds;
       unsigned long mils = millis();
       bool hasAliveBit = false;
       for (unsigned int i = 0; i < numBits; ++i) {
@@ -286,7 +230,7 @@ class Bits : public Pattern {
             bit->tick();
           }
           hasAliveBit = true;
-        } else if (!isStopping()) {
+        } else if (isRunning()) {
           bit->reset(getBitColor());
           hasAliveBit = true;
         }
@@ -295,19 +239,11 @@ class Bits : public Pattern {
         bits[numBits++] = Bit(getBitColor());
         lastBitCreation = mils;
       }
-      if (!isStopping()) {
+      if (isRunning()) {
+        // TODO: not needed after global pattern crossfade
         leds.fadeToBlackBy(preset.fadedown);
       } else if (!hasAliveBit) {
-        stopCompleted();
-      }
-    }
-
-    void stopCompleted() {
-      Pattern::stopCompleted();
-      if (bits) {
-        free(bits);
-        bits = NULL;
-        numBits = 0;
+        // done fading out
       }
     }
 
@@ -322,33 +258,29 @@ class Bits : public Pattern {
 // FIXME: look into just grabbing lots of data and pushing it through map_data_into_colors_through_palette, using data stream from microphone or motion
 
 
-#if USE_AUDIO
-
 #define EXTRA_GAIN 200
 
 class Sound: public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
 private:
   static const int fftBinCount = PANEL_WIDTH;
   int framesWithoutAudioData = 0;
-  // float levelsAccum[fftBinCount];
   const float *levels = NULL;
   bool upsideDown = false;
 public:
   Sound() : PaletteRotation(minBrightness=10), FFTProcessing(fftBinCount) {
   }
-  
-  void setup() {
-    // bzero(levelsAccum, sizeof(levelsAccum));
-    audioManager.subscribe();
-    upsideDown = (random8(2) == 0);
-  }
 
-  void stopCompleted() {
-    Pattern::stopCompleted();
+  ~Sound() {
     audioManager.unsubscribe();
   }
   
-  void update(CRGBArray<NUM_LEDS> &leds) {
+  void setup() {
+    audioManager.subscribe();
+    upsideDown = (random8(2) == 0);
+  }
+  
+  void update(DrawingContext &ctx) {
+    CRGBArray<NUM_LEDS> leds = ctx.leds;
     leds.fill_solid(CRGB::Black);
     
     if (fftAvailable()) {
@@ -380,18 +312,12 @@ public:
     EVERY_N_MILLISECONDS(5000) {
       audioManager.printStatistics();
     }
-    
-    if (isStopping()) {
-      stopCompleted();
-    }
   }
   
   const char *description() {
     return "Sound";
   }
 };
-
-#endif
 
 /* ------------------------------------------------------------------------------------------------------ */
 
@@ -436,6 +362,11 @@ public:
   CRGBPalette16 palette;
   long lastDisplay = -kBlobsResetTimeout;
 
+  ~Motion() {
+    motionManager.unsubscribe();
+    delete [] blobs;
+  }
+
   void resetBlobs(DrawingContext &ctx) {
     // space out the blobs so they don't overlap
     const int ybuckets = 2;
@@ -465,13 +396,6 @@ public:
     blobs = new MotionBlob[kBlobCount];
   }
 
-  void stopCompleted() {
-    Pattern::stopCompleted();
-    motionManager.unsubscribe();
-    delete [] blobs;
-    blobs = NULL;
-  }
-
   void update(DrawingContext &ctx) {
     ctx.leds.fadeToBlackBy(25);
 
@@ -493,10 +417,6 @@ public:
       ctx.popStyle();
       lastDisplay = millis();
     }
-
-    if (isStopping()) {
-      stopCompleted();
-    }
   }
   
   bool wantsToIdleStop() {
@@ -510,10 +430,6 @@ public:
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-
-// idea: a pattern that can handle motion, sound, or be idle
-// this is the idle version. could feed audio into it to make the bars pulse in brightness, or feed motion to make them move
-
 class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
   const int kSecondsPerPalette = 10;
   const int kBarWidth = 8;
@@ -521,7 +437,14 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
   
   float *xvelocities = NULL;
   float *xoffsets = NULL;
-  
+public:  
+  ~Bars() {
+    delete [] xvelocities;
+    delete [] xoffsets;
+
+    motionManager.unsubscribe();
+  }
+
   void setup(DrawingContext &ctx) {
     numBars = ctx.width / kBarWidth / 2 * ctx.height;
 
@@ -536,17 +459,6 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
     }
 
     motionManager.subscribe();
-  }
-
-  void stopCompleted() {
-    Pattern::stopCompleted();
-    delete [] xvelocities;
-    xvelocities = NULL;
-    delete [] xoffsets;
-    xoffsets = NULL;
-
-    releaseTrackedColors();
-    motionManager.unsubscribe();
   }
   
   void update(DrawingContext &ctx) {
@@ -582,10 +494,6 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
     }
 
     ctx.popStyle();
-
-    if (isStopping()) {
-      stopCompleted();
-    }
   }
   
   const char *description() {
@@ -605,16 +513,15 @@ public:
     secondsPerPalette = 20;
   }
 
+  ~Oscillators() {
+    motionManager.unsubscribe();
+    audioManager.unsubscribe();
+  }
+
   void setup(DrawingContext &ctx) {
     motionManager.subscribe();
     audioManager.subscribe();
     usePalette = random8(2) == 0;
-  }
-
-  void stopCompleted() {
-    Pattern::stopCompleted();
-    motionManager.unsubscribe();
-    audioManager.unsubscribe();
   }
 
   void update(DrawingContext &ctx) {
@@ -664,9 +571,6 @@ public:
       }
     }
     offset *= 0.98;
-    if (isStopping()) {
-      stopCompleted();
-    }
   }
   const char *description() {
     return "Oscillators";
@@ -676,6 +580,10 @@ public:
 /* ------------------------------------------------------------------------------------------------------ */
 
 class RainbowMotion : public Pattern {
+  ~RainbowMotion() {
+    motionManager.unsubscribe();
+  }
+
   bool wantsToIdleStop() {
     return true;
   }
@@ -684,12 +592,8 @@ class RainbowMotion : public Pattern {
     motionManager.subscribe();
   }
 
-  void stopCompleted() {
-    Pattern::stopCompleted();
-    motionManager.unsubscribe();
-  }
-
-  void update(CRGBArray<NUM_LEDS> &leds) {
+  void update(DrawingContext &ctx) {
+    CRGBArray<NUM_LEDS> leds = ctx.leds;
     sensors_event_t event; 
     motionManager.getEvent(&event);
     
@@ -738,33 +642,27 @@ public:
     for (int i = 0; i < PANEL_COUNT; ++i) {
       pixelDust[i] = new Adafruit_PixelDust(PANEL_WIDTH, PANEL_HEIGHT, numParticles, 0xFF, 101, false);
     }
-  }
 
-  bool initialized = false;
-
-  void setup() {
-    motionManager.subscribe();
-    if (!initialized) {
-      // pixelDust->begin looks like it can be called multiple times, but it cannot.
-      initialized = true;
-      for (int i = 0; i < PANEL_COUNT; ++i) {
-        if(!pixelDust[i]->begin()) {
-          logf("PixelDust init failed");
-        }
-        pixelDust[i]->randomize();
+    for (int i = 0; i < PANEL_COUNT; ++i) {
+      if(!pixelDust[i]->begin()) {
+        logf("PixelDust init failed");
       }
+      pixelDust[i]->randomize();
     }
 
     prepareTrackedColors(numParticles);
   }
 
-  void stopCompleted() {
-    Pattern::stopCompleted();
+  ~PixelDust() {
     motionManager.unsubscribe();
-    releaseTrackedColors();
   }
 
-  void update(CRGBArray<NUM_LEDS> &leds) {
+  void setup() {
+    motionManager.subscribe();
+  }
+
+  void update(DrawingContext &ctx) {
+    CRGBArray<NUM_LEDS> leds = ctx.leds;
     dimension_t x, y;
     sensors_event_t accel;
     sensors_event_t linear_accel;
@@ -795,10 +693,6 @@ public:
         pixelDust[i]->getPosition(p, &x, &y);
         leds[ledxy(x + i * PANEL_WIDTH, y)] = getTrackedColor(p);
       }
-    }
-
-    if (isStopping()) {
-      stopCompleted();
     }
   }
 
@@ -832,7 +726,8 @@ class Droplets : public Pattern {
       }
     }
     
-    void update(CRGBArray<NUM_LEDS> &leds) {
+    void update(DrawingContext &ctx) {
+      CRGBArray<NUM_LEDS> leds = ctx.leds;
       const unsigned int dropInterval = 80;
       const unsigned int flowInterval = 30;
       const float kFlow = 0.2;
@@ -891,9 +786,6 @@ class Droplets : public Pattern {
         }
         lastFlow  = mils;
       }
-      if (isStopping()) {
-        stopCompleted();
-      }
     }
 
     const char *description() {
@@ -912,12 +804,10 @@ class SmoothPalettes : public Pattern {
     void setup() {
       gTargetPalette = gGradientPalettes[random16(gGradientPaletteCount)];
     }
-    void update(CRGBArray<NUM_LEDS> &leds) {
+    void update(DrawingContext &ctx) {
+      CRGBArray<NUM_LEDS> leds = ctx.leds;
       EVERY_N_MILLISECONDS(20) {
         draw(leds);
-      }
-      if (isStopping()) {
-        stopCompleted();
       }
     }
 

@@ -7,8 +7,7 @@
 // end FIXME
 
 #define DEBUG 1
-#define WAIT_FOR_SERIAL 0
-#define USE_AUDIO 1
+#define WAIT_FOR_SERIAL 1
 
 #include <FastLED.h>
 
@@ -22,49 +21,18 @@
 #define NUM_LEDS (PANEL_LEDS * PANEL_COUNT)
 
 #include "util.h"
-#include "patterns.h"
+#include "PatternManager.h"
 #include "AudioManager.h"
 #include "controls.h"
 
 CRGBArray<NUM_LEDS> leds;
 DrawingContext *drawingContext;
 
-Droplets dropletsPattern;
-Bits bitsPattern;
-SmoothPalettes smoothPalettes;
-Motion motion;
-PixelDust pixelDust;
-Bars barsPattern;
-Oscillators oscillatorsPattern;
-#if USE_AUDIO
-Sound soundPattern;
-#endif
-
-Pattern *idlePatterns[] = {
-                            &smoothPalettes, &pixelDust, &barsPattern, &oscillatorsPattern, 
-#if USE_AUDIO
-                            &soundPattern
-#endif
-                          };
-const unsigned int kIdlePatternsCount = ARRAY_SIZE(idlePatterns);
-
-Pattern *activePattern = NULL;
-Pattern *lastPattern = NULL;
-
-/* ---- Test Options ---- */
-const bool kTestPatternTransitions = false;
-const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
-
-Pattern *testIdlePattern = NULL;
-// Pattern *testIdlePattern = &oscillatorsPattern;
-// Pattern *testIdlePattern = &soundPattern;
-// Pattern *testIdlePattern = &barsPattern;
-
 /* ---------------------- */
 
-unsigned long lastTrigger = 0;
 FrameCounter fc;
 HardwareControls controls;
+PatternManager patternManager;
 
 #define UNCONNECTED_PIN_1 A9
 #define UNCONNECTED_PIN_2 A3
@@ -96,15 +64,7 @@ int lsb_noise(int pin, int numbits) {
 #define BUTTON_PIN 0
 
 void buttonSinglePress() {
-  logf("single press!");
-  // TODO: make deterministic?
-  if (activePattern != NULL && activePattern->isRunning()) {
-    if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
-      activePattern->lazyStop();
-      lastPattern = activePattern;
-      activePattern = NULL;
-    }
-  }
+  patternManager.nextPattern();
 }
 
 void buttonDoublePress() {
@@ -152,6 +112,7 @@ void setup() {
   FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
 
   drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
+  patternManager.drawingContext = drawingContext;
 
   fc.tick();
   SPSTButton *button = controls.addButton(BUTTON_PIN);
@@ -184,42 +145,8 @@ void loop() {
     serialTimeoutIndicator();
     return;
   }
-  for (unsigned i = 0; i < kIdlePatternsCount; ++i) {
-    Pattern *pattern = idlePatterns[i];
-    if (pattern->isRunning() || pattern->isStopping()) {
-      pattern->loop(*drawingContext);
-    }
-  }
 
-  // clear out patterns that have stopped themselves
-  if (activePattern != NULL && !activePattern->isRunning()) {
-    logf("Clearing inactive pattern %s", activePattern->description());
-    activePattern = NULL;
-  }
-
-  // time out idle patterns
-  if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {
-    if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
-      activePattern->lazyStop();
-      lastPattern = activePattern;
-      activePattern = NULL;
-    }
-  }
-
-  // start a new idle pattern
-  if (activePattern == NULL) {
-    Pattern *nextPattern;
-    if (testIdlePattern != NULL) {
-      nextPattern = testIdlePattern;
-    } else {
-      int choice = (int)random8(kIdlePatternsCount);
-      nextPattern = idlePatterns[choice];
-    }
-    if ((nextPattern != lastPattern || nextPattern == testIdlePattern || kIdlePatternsCount == 1) && !nextPattern->isRunning() && nextPattern->wantsToRun()) {
-      nextPattern->start(*drawingContext);
-      activePattern = nextPattern;
-    }
-  }
+  patternManager.loop();
    
   applyBrightnessSettings();
   

@@ -1,6 +1,7 @@
 #ifndef PATTERN_H
 #define PATTERN_H
 
+#include <vector>
 #include <FastLED.h>
 #include <Audio.h>
 
@@ -18,9 +19,7 @@
 // HACK: Creating/initializing MotionManager (and the BNO) before AudioManager (and the i2s) resolves a crashing issue
 // I don't understand why.
 MotionManager motionManager;
-#if USE_AUDIO
 AudioManager audioManager;
-#endif
 
 class Pattern {
   protected:
@@ -28,7 +27,7 @@ class Pattern {
     long stopTime = -1;
     long lastUpdateTime = -1;
     Pattern *subPattern = NULL;
-
+public:
     virtual void stopCompleted() {
       if (!readyToStop()) {
         logf("WARNING: stopped %s before subPattern was stopped", description());
@@ -42,6 +41,7 @@ class Pattern {
         subPattern = NULL;
       }
     }
+protected:
 
     virtual Pattern *makeSubPattern() {
       return NULL;
@@ -322,8 +322,6 @@ class Bits : public Pattern {
 // FIXME: look into just grabbing lots of data and pushing it through map_data_into_colors_through_palette, using data stream from microphone or motion
 
 
-#if USE_AUDIO
-
 #define EXTRA_GAIN 200
 
 class Sound: public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
@@ -390,8 +388,6 @@ public:
     return "Sound";
   }
 };
-
-#endif
 
 /* ------------------------------------------------------------------------------------------------------ */
 

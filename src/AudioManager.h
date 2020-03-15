@@ -1,5 +1,3 @@
-#if USE_AUDIO
-
 #ifndef AUDIO_MANAGER_H
 #define AUDIO_MANAGER_H
 
@@ -166,7 +164,5 @@ public:
     Serial.println();
   }
 };
-
-#endif
 
 #endif

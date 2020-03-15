@@ -4,28 +4,14 @@
 #include <EEPROM.h>
 #include "patterns.h"
 
-Droplets dropletsPattern;
-Bits bitsPattern;
-SmoothPalettes smoothPalettes;
-Motion motion;
-PixelDust pixelDust;
-Bars barsPattern;
-Oscillators oscillatorsPattern;
-Sound soundPattern;
-
 /* ---- Test Options ---- */
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-Pattern *testIdlePattern = NULL;
-// Pattern *testIdlePattern = &oscillatorsPattern;
-// Pattern *testIdlePattern = &soundPattern;
-// Pattern *testIdlePattern = &barsPattern;
-
-Pattern *idlePatterns[] = {
-                            &smoothPalettes, &pixelDust, &barsPattern, &oscillatorsPattern, &soundPattern
-                          };
-const unsigned int kIdlePatternsCount = ARRAY_SIZE(idlePatterns);
+// Pattern *testIdlePattern = NULL;
+Pattern *testIdlePattern = new Oscillators();
+// Pattern *testIdlePattern = new Sound();
+// Pattern *testIdlePattern = new Bars());
 
 class PatternManager {
   int patternIndex = -1;
@@ -55,7 +41,7 @@ public:
 
   void nextPattern() {
     if (activePattern) {
-      activePattern->lazyStop();
+      activePattern->stop();
       delete activePattern;
       activePattern = NULL;
     }
@@ -88,7 +74,7 @@ public:
     // time out idle patterns
     if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {
       if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
-        activePattern->lazyStop();
+        activePattern->stop();
         delete activePattern;
         activePattern = NULL;
       }
@@ -96,8 +82,12 @@ public:
 
     // start a new random pattern if there is none
     if (activePattern == NULL) {
-      int choice = (int)random8(patternConstructors.size());
-      startPatternAtIndex(choice);
+      if (testIdlePattern) {
+        activePattern = testIdlePattern;
+      } else {
+        int choice = (int)random8(patternConstructors.size());
+        startPatternAtIndex(choice);
+      }
     }
   }
 };

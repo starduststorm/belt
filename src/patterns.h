@@ -267,15 +267,14 @@ private:
   const float *levels = NULL;
   bool upsideDown = false;
 public:
-  Sound() : PaletteRotation(minBrightness=10), FFTProcessing(fftBinCount) {
+  Sound() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBinCount) {
   }
 
   ~Sound() {
-    audioManager.unsubscribe();
+    
   }
   
   void setup() {
-    audioManager.subscribe();
     upsideDown = (random8(2) == 0);
   }
   
@@ -509,18 +508,16 @@ class Oscillators : public Pattern, public PaletteRotation<CRGBPalette16>, publi
   bool usePalette;
   float fftHistory[fftBins][PANEL_HEIGHT];
 public:
-  Oscillators() : PaletteRotation(minBrightness=10), FFTProcessing(fftBins) {
+  Oscillators() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBins) {
     secondsPerPalette = 20;
   }
 
   ~Oscillators() {
     motionManager.unsubscribe();
-    audioManager.unsubscribe();
   }
 
   void setup(DrawingContext &ctx) {
     motionManager.subscribe();
-    audioManager.subscribe();
     usePalette = random8(2) == 0;
   }
 

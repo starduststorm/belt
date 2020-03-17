@@ -11,16 +11,76 @@ AudioAnalyzePeak         peak1;          //xy=514.2222290039062,297.000017166137
 AudioAnalyzeFFT1024      fft1024_1;      //xy=521.6666984558105,210.6666717529297
 AudioConnection          patchCord1(i2s1, 0, amp1, 0);
 AudioConnection          patchCord2(amp1, fft1024_1);
-AudioConnection          patchCord3(amp1, peak1);
+AudioConnection          patchCord3(i2s1, peak1);
 // GUItool: end automatically generated code
 
 #define RAW_FFT_BANDS 512
+
+class AudioManager {
+private:
+  float gain = 10.0;
+  float peakAccum = 0;
+public:
+  AudioManager() {
+    AudioMemory(12);
+    fft1024_1.windowFunction(AudioWindowHanning1024);
+    amp1.gain(gain);
+  }
+
+  void subscribe() {
+    
+  }
+  
+  void unsubscribe() {
+    // FIXME: need a way to disable or pause fft, but may need to patch the audio library
+  }
+
+  void tick() {
+    const int peakSamples = 30;
+    EVERY_N_MILLIS(1000/60.) {
+      if (peak1.available()) {
+        float peakVal = peak1.read();
+
+        peakAccum = (peakSamples * peakAccum + peakVal) / (peakSamples + 1);
+        gain = min(20, 0.05/(peakAccum * peakAccum));
+
+        // logf("Peak: %f, RMS = %f, suggested gain: %f", peakAccum, rmsVal, gain);
+      }
+    }
+    EVERY_N_SECONDS(1) {
+      amp1.gain(gain);
+    }
+  }
+
+  void printStatistics() {
+    // print a summary of the current & maximum usage
+    Serial.print("CPU: ");
+    Serial.print("fft=");
+    Serial.print(fft1024_1.processorUsage());
+    Serial.print(",");
+    Serial.print(fft1024_1.processorUsageMax());
+    Serial.print("  ");
+    Serial.print("all audio compute=");
+    Serial.print(AudioProcessorUsage());
+    Serial.print(",");
+    Serial.print(AudioProcessorUsageMax());
+    Serial.print("    ");
+    Serial.print("audio memory: ");
+    Serial.print(AudioMemoryUsage());
+    Serial.print(",");
+    Serial.print(AudioMemoryUsageMax());
+    Serial.println();
+  }
+};
+
+/* ---------------------------- */
 
 class FFTProcessing {
   int *fftBinSizes;
   float *levels;
   float *levelsAccum;
-private:
+  AudioManager *manager;
+
   // https://forum.pjrc.com/threads/32677-Is-there-a-logarithmic-function-for-FFT-bin-selection-for-any-given-of-bands
   float FindE(int bands, int bins) {
     float increment = 0.1, eTest, n;
@@ -67,15 +127,19 @@ private:
 
 public:
   const int fftNumBins;
-  FFTProcessing(int numBins) : fftNumBins(numBins) {
+  FFTProcessing(AudioManager *audioManager, int numBins) : fftNumBins(numBins) {
     fftBinSizes = new int[fftNumBins];
     levels = new float[fftNumBins];
     levelsAccum = new float[fftNumBins];
     bzero(levelsAccum, fftNumBins * sizeof(levelsAccum[0]));
 
     getFFTBins(fftNumBins, RAW_FFT_BANDS, fftBinSizes);
+
+    manager = audioManager;
+    manager->subscribe();
   }
   ~FFTProcessing() {
+    manager->unsubscribe();
     delete [] fftBinSizes;
     delete [] levels;
     delete [] levelsAccum;
@@ -86,6 +150,7 @@ public:
   }
 
   const float *fftLevels(unsigned int avgSamples=0) {
+    manager->tick();
     for (int i = 0; i < fftNumBins; i++) {
       int stopIndex = (i < fftNumBins - 1 ? fftBinSizes[i + 1] - 1 : RAW_FFT_BANDS - 1);
       levels[i] = fft1024_1.read(fftBinSizes[i], stopIndex);
@@ -122,46 +187,6 @@ public:
       }
       Serial.println();
     }
-  }
-};
-
-class AudioManager {
-private:
-  float gain = 10.0; // FIXME: make this dynamic
-
-public:
-  AudioManager() {
-    AudioMemory(12);
-    fft1024_1.windowFunction(AudioWindowHanning1024);
-    amp1.gain(gain);
-  }
-
-  void subscribe() {
-    
-  }
-  
-  void unsubscribe() {
-    // FIXME: need a way to disable or pause fft, but may need to patch the audio library
-  }
-
-  void printStatistics() {
-    // print a summary of the current & maximum usage
-    Serial.print("CPU: ");
-    Serial.print("fft=");
-    Serial.print(fft1024_1.processorUsage());
-    Serial.print(",");
-    Serial.print(fft1024_1.processorUsageMax());
-    Serial.print("  ");
-    Serial.print("all audio compute=");
-    Serial.print(AudioProcessorUsage());
-    Serial.print(",");
-    Serial.print(AudioProcessorUsageMax());
-    Serial.print("    ");
-    Serial.print("audio memory: ");
-    Serial.print(AudioMemoryUsage());
-    Serial.print(",");
-    Serial.print(AudioMemoryUsageMax());
-    Serial.println();
   }
 };
 

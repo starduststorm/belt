@@ -10,8 +10,8 @@ const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
 // Pattern *testIdlePattern = NULL;
-Pattern *testIdlePattern = new Oscillators();
-// Pattern *testIdlePattern = new Sound();
+// Pattern *testIdlePattern = new Oscillators();
+Pattern *testIdlePattern = new Sound();
 // Pattern *testIdlePattern = new Bars());
 
 class PatternManager {

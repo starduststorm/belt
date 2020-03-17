@@ -26,7 +26,6 @@ private:
   long startTime = -1;
   long stopTime = -1;
   long lastUpdateTime = -1;
-
 public:
   virtual ~Pattern() { }
 
@@ -653,11 +652,14 @@ public:
     }
 
     prepareTrackedColors(numParticles);
-    motionManager.subscribe();
   }
 
   ~PixelDust() {
     motionManager.unsubscribe();
+  }
+
+  void setup() {
+    motionManager.subscribe();
   }
 
   void update(DrawingContext &ctx) {

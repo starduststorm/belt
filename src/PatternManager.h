@@ -55,13 +55,21 @@ public:
   bool startPatternAtIndex(int index) {
     auto ctor = patternConstructors[index];
     Pattern *nextPattern = ctor();
-    if (nextPattern->wantsToRun()) {
-      nextPattern->start(*drawingContext);
-      activePattern = nextPattern;
+    if (startPattern(nextPattern)) {
       patternIndex = index;
       return true;
     } else {
-      delete nextPattern;
+      delete nextPattern; // patternConstructors returns retained
+      return false;
+    }
+  }
+
+  bool startPattern(Pattern *pattern) {
+    if (pattern->wantsToRun()) {
+      pattern->start(*drawingContext);
+      activePattern = pattern;
+      return true;
+    } else {
       return false;
     }
   }
@@ -83,7 +91,7 @@ public:
     // start a new random pattern if there is none
     if (activePattern == NULL) {
       if (testIdlePattern) {
-        activePattern = testIdlePattern;
+        startPattern(testIdlePattern);
       } else {
         int choice = (int)random8(patternConstructors.size());
         startPatternAtIndex(choice);

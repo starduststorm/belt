@@ -555,7 +555,7 @@ public:
         uint8_t colorIndex = 255./fftBins * (int)bucket;
         CRGB color;
         if (usePalette) {
-          color = getPaletteColor(colorIndex);
+          color = getPaletteColor(addmod8(colorIndex, 51, 0xFF));
         } else {
           color = CHSV(colorIndex, 0xFF, 0xFF);
         }

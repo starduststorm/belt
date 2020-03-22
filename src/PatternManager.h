@@ -11,8 +11,9 @@ const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 
 
 // Pattern *testIdlePattern = NULL;
 // Pattern *testIdlePattern = new Oscillators();
-Pattern *testIdlePattern = new Sound();
+// Pattern *testIdlePattern = new Sound();
 // Pattern *testIdlePattern = new Bars());
+Pattern *testIdlePattern = new Droplets();
 
 class PatternManager {
   int patternIndex = -1;
@@ -34,8 +35,8 @@ public:
     patternConstructors.push_back(&(construct<Bars>));
     patternConstructors.push_back(&(construct<Oscillators>));
     patternConstructors.push_back(&(construct<Sound>));
-
-    // patternConstructors.push_back(&(PatternManager::construct<Droplets>));
+    patternConstructors.push_back(&(construct<Droplets>));
+    
     // patternConstructors.push_back(&(PatternManager::construct<Bits>));
     // patternConstructors.push_back(&(PatternManager::construct<Motion>));
   }

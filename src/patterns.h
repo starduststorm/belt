@@ -701,93 +701,94 @@ public:
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-// TODO: make 2-dimentional
 // vary drop shape and size by varying parameters flow,eff,loss,interval etc. parameters randomly, or to data fed by sound or motion
 
 // this pattern, and others, can react to motion data or sound always, if it's detected, only when toggled, or never. 
 // if it can be detected, then I can run idle behavior when it's absent. 
 // if toggled, that would enable e.g. Bars pattern to follow my motion with a tiny bit of inertia so it spins as I walk around, even slowly, or can be toggled off to just run idle
 
-class Droplets : public Pattern {
-  private:
-    unsigned long lastDrop;
-    unsigned long lastFlow;
-    CRGB cs[NUM_LEDS];
-    CRGBPalette16 palette;
-    bool usePalette;
+class Droplets : public Pattern, public PaletteRotation<CRGBPalette256>{
+private:
+  unsigned long lastDrop;
+  unsigned long lastFlow;
+  CRGB cs[NUM_LEDS];
 
-    void setup() {
-      usePalette = (random(3) > 0);
-      if (usePalette) {
-        palette = gGradientPalettes[random16(gGradientPaletteCount)];
+  void flowDroplets(DrawingContext &ctx, int i, int i2) {
+    const float kFlow = 0.1;
+    const float kEff = 0.80;
+    const int minLoss = 0;
+
+    CRGB led1 = ctx.leds[i];
+    CRGB led2 = ctx.leds[i2];
+    for (uint8_t sp = 0; sp < 3; ++sp) { // each subpixel
+      uint8_t *refSp = NULL;
+      uint8_t *srcSp = NULL;
+      uint8_t *dstSp = NULL;
+      if (led1[sp] < led2[sp]) {
+        refSp = &led2[sp];
+        srcSp = &cs[i2][sp];
+        dstSp = &cs[i][sp];
+      } else if (led1[sp] > led2[sp] ) {
+        refSp = &led1[sp];
+        srcSp = &cs[i][sp];
+        dstSp = &cs[i2][sp];
+      }
+      if (srcSp && dstSp) {
+        uint8_t flow = ceilf(min(*srcSp, min((kFlow * *refSp), 0xFF - *dstSp)));
+        *dstSp += kEff * flow;
+        if (*srcSp > flow && *srcSp > minLoss) {
+          *srcSp -= max(minLoss, flow);
+        } else {
+          *srcSp = 0;
+        }
       }
     }
-    
-    void update(DrawingContext &ctx) {
-      CRGBArray<NUM_LEDS> leds = ctx.leds;
-      const unsigned int dropInterval = 80;
-      const unsigned int flowInterval = 30;
-      const float kFlow = 0.2;
-      const float kEff = 0.99;
-      const int minLoss = 1;
+  }
 
-      unsigned long mils = millis();
-      if (mils - lastDrop > dropInterval) {
-        int center = random16(NUM_LEDS);
-        CRGB color;
-        if (usePalette) {
-          color = ColorFromPalette(palette, random8());
-        } else {
-          color = CHSV(random8(), 255, 255);
-        }
-        for (int i = -2; i < 3; ++i) {
-          leds[mod_wrap(center + i, NUM_LEDS)] = color;
-        }
-        lastDrop = mils;
+  void update(DrawingContext &ctx) {
+    CRGBArray<NUM_LEDS> leds = ctx.leds;
+    const unsigned int dropInterval = 80;
+    const unsigned int flowInterval = 30;
+
+    unsigned long mils = millis();
+    if (mils - lastDrop > dropInterval) {
+      float dropx = random16(ctx.width * 4) / 4.0;
+      float dropy = random16(ctx.height * 4) / 4.0;
+      CRGB color = getPaletteColor(random8());
+      ctx.circle(dropx, dropy, 2, 8, true, color);
+      lastDrop = mils;
+    }
+    if (mils - lastFlow > flowInterval) {
+      for (int i = 0; i < NUM_LEDS; ++i) {
+        cs[i] = leds[i];
       }
-      if (mils - lastFlow > flowInterval) {
-        for (int i = 0; i < NUM_LEDS; ++i) {
-          cs[i] = leds[i];
-        }
-        for (int i = 0; i < NUM_LEDS; ++i) {
-          int i2 = (i + 1) % NUM_LEDS;
-          // calculate flows from og leds, set in scratch
-          CRGB led1 = leds[i];
-          CRGB led2 = leds[i2];
-          for (uint8_t sp = 0; sp < 3; ++sp) { // each subpixel
-            uint8_t *refSp = NULL;
-            uint8_t *srcSp = NULL;
-            uint8_t *dstSp = NULL;
-            if (led1[sp] < led2[sp]) {
-              refSp = &led2[sp];
-              srcSp = &cs[i2][sp];
-              dstSp = &cs[i][sp];
-            } else if (led1[sp] > led2[sp] ) {
-              refSp = &led1[sp];
-              srcSp = &cs[i][sp];
-              dstSp = &cs[i2][sp];
+      for (int p = 0; p < PANEL_COUNT; ++p) {
+        for (int x = 0; x < PANEL_WIDTH; ++x) {
+          for (int y = 0; y < PANEL_HEIGHT; ++y) {
+            int i = ledxy(p * PANEL_WIDTH + x, y);
+            if (x < PANEL_WIDTH - 1) {
+              int i2 = ledxy(p * PANEL_WIDTH + x+1, y);
+              // calculate flows from og leds, set in scratch
+              flowDroplets(ctx, i, i2);
             }
-            if (srcSp && dstSp) {
-              uint8_t flow = min(*srcSp, min((int)(kFlow * *refSp), 0xFF - *dstSp));
-              *dstSp += kEff * flow;
-              if (*srcSp > flow && *srcSp > minLoss) {
-                *srcSp -= max(minLoss, flow);
-              } else {
-                *srcSp = 0;
-              }
+            if (y < PANEL_HEIGHT - 1) {
+              int i3 = ledxy(p * PANEL_WIDTH + x, y+1);
+              // calculate flows from og leds, set in scratch
+              flowDroplets(ctx, i, i3);
             }
           }
         }
-        for (int i = 0; i < NUM_LEDS; ++i) {
-          leds[i] = cs[i];
-        }
-        lastFlow  = mils;
       }
+      for (int i = 0; i < NUM_LEDS; ++i) {
+        leds[i] = cs[i];
+      }
+      lastFlow  = mils;
     }
+  }
 
-    const char *description() {
-      return "Droplets";
-    }
+  const char *description() {
+    return "Droplets";
+  }
 };
 
 /* ------------------- */

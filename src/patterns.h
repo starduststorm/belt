@@ -707,41 +707,65 @@ public:
 // if it can be detected, then I can run idle behavior when it's absent. 
 // if toggled, that would enable e.g. Bars pattern to follow my motion with a tiny bit of inertia so it spins as I walk around, even slowly, or can be toggled off to just run idle
 
-class Droplets : public Pattern, public PaletteRotation<CRGBPalette256>{
+class Droplets : public Pattern, public PaletteRotation<CRGBPalette256> {
 private:
   unsigned long lastDrop;
   unsigned long lastFlow;
-  CRGB cs[NUM_LEDS];
-
-  void flowDroplets(DrawingContext &ctx, int i, int i2) {
+  FCRGB scratch[NUM_LEDS];
+  FCRGBArray<NUM_LEDS> accum;
+  CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> > *accumCtx;
+  
+  void flowDroplets(int i, int i2) {
     const float kFlow = 0.1;
-    const float kEff = 0.80;
-    const int minLoss = 0;
+    const float kEff = 0.70;
+    const float minLoss = 0.5;
 
-    CRGB led1 = ctx.leds[i];
-    CRGB led2 = ctx.leds[i2];
+    FCRGB led1 = accumCtx->leds[i];
+    FCRGB led2 = accumCtx->leds[i2];
+    int dimSrcSpCount = 0;
     for (uint8_t sp = 0; sp < 3; ++sp) { // each subpixel
-      uint8_t *refSp = NULL;
-      uint8_t *srcSp = NULL;
-      uint8_t *dstSp = NULL;
+      float *refSp = NULL;
+      float *srcSp = NULL;
+      float *dstSp = NULL;
       if (led1[sp] < led2[sp]) {
         refSp = &led2[sp];
-        srcSp = &cs[i2][sp];
-        dstSp = &cs[i][sp];
+        srcSp = &scratch[i2][sp];
+        dstSp = &scratch[i][sp];
       } else if (led1[sp] > led2[sp] ) {
         refSp = &led1[sp];
-        srcSp = &cs[i][sp];
-        dstSp = &cs[i2][sp];
+        srcSp = &scratch[i][sp];
+        dstSp = &scratch[i2][sp];
       }
       if (srcSp && dstSp) {
-        uint8_t flow = ceilf(min(*srcSp, min((kFlow * *refSp), 0xFF - *dstSp)));
+        float flow = min(*srcSp, min((kFlow * *refSp), 0xFF - *dstSp));
         *dstSp += kEff * flow;
         if (*srcSp > flow && *srcSp > minLoss) {
           *srcSp -= max(minLoss, flow);
         } else {
-          *srcSp = 0;
+          // attempt to avoid aliasing by not turning off subpixels
+          dimSrcSpCount++;
         }
       }
+    }
+    if (dimSrcSpCount == 3) {
+      scratch[i2] = FCRGB(0,0,0);
+    }
+  }
+
+public:
+  Droplets() { }
+  ~Droplets() {
+    delete accumCtx;
+  }
+
+  void setup(DrawingContext &ctx) {
+    accumCtx = new CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> >(accum, ctx.width, ctx.height);
+
+    // copy the whole standard pixel buffer into a floating-point pixel buffer
+    for (int i = 0; i < NUM_LEDS; ++i) {
+      accumCtx->leds[i].red = ctx.leds[i].r;
+      accumCtx->leds[i].green = ctx.leds[i].g;
+      accumCtx->leds[i].blue = ctx.leds[i].b;
     }
   }
 
@@ -755,12 +779,12 @@ private:
       float dropx = random16(ctx.width * 4) / 4.0;
       float dropy = random16(ctx.height * 4) / 4.0;
       CRGB color = getPaletteColor(random8());
-      ctx.circle(dropx, dropy, 2, 8, true, color);
+      accumCtx->circle(dropx, dropy, 2, 8, true, FCRGB(color));
       lastDrop = mils;
     }
     if (mils - lastFlow > flowInterval) {
       for (int i = 0; i < NUM_LEDS; ++i) {
-        cs[i] = leds[i];
+        scratch[i] = accum[i];
       }
       for (int p = 0; p < PANEL_COUNT; ++p) {
         for (int x = 0; x < PANEL_WIDTH; ++x) {
@@ -769,20 +793,25 @@ private:
             if (x < PANEL_WIDTH - 1) {
               int i2 = ledxy(p * PANEL_WIDTH + x+1, y);
               // calculate flows from og leds, set in scratch
-              flowDroplets(ctx, i, i2);
+              flowDroplets(i, i2);
             }
             if (y < PANEL_HEIGHT - 1) {
               int i3 = ledxy(p * PANEL_WIDTH + x, y+1);
               // calculate flows from og leds, set in scratch
-              flowDroplets(ctx, i, i3);
+              flowDroplets(i, i3);
             }
           }
         }
       }
       for (int i = 0; i < NUM_LEDS; ++i) {
-        leds[i] = cs[i];
+        accumCtx->leds[i] = scratch[i];
       }
       lastFlow  = mils;
+    }
+    for (int i = 0; i < NUM_LEDS; ++i) {
+        leds[i].red = ceilf(accumCtx->leds[i].red);
+        leds[i].green = ceilf(accumCtx->leds[i].green);
+        leds[i].blue = ceilf(accumCtx->leds[i].blue);
     }
   }
 

@@ -19,14 +19,15 @@ public:
   bool wrap = false;
 };
 
-class DrawingContext {
+template<class PixelType, class BufferType>
+class CustomDrawingContext {
 private:
   std::stack<DrawStyle> styleStack;
 public:
   DrawStyle drawStyle;
   int width, height;
-  CRGBArray<NUM_LEDS> &leds;
-  DrawingContext(CRGBArray<NUM_LEDS> &leds, unsigned width, unsigned height) : leds(leds) {
+  BufferType &leds;
+  CustomDrawingContext(BufferType &leds, unsigned width, unsigned height) : leds(leds) {
     this->width = width;
     this->height = height;
   }
@@ -46,7 +47,7 @@ public:
     styleStack.pop();
   }
   
-  void point(int x, int y, CRGB src, BlendMode blendMode) {
+  void point(int x, int y, PixelType src, BlendMode blendMode) {
     if (drawStyle.wrap) {
       x = mod_wrap(x, width);
       y = mod_wrap(y, width);
@@ -63,26 +64,26 @@ public:
     switch (blendMode) {
       case blendSourceOver: leds[index] = src; break;
       case blendBrighten: {
-        CRGB dst = leds[index];
-        leds[index] = CRGB(max(src.r, dst.r), max(src.g, dst.g), max(src.b, dst.b));
+        PixelType dst = leds[index];
+        leds[index] = PixelType(max(src.r, dst.r), max(src.g, dst.g), max(src.b, dst.b));
         break;
       }
       case blendDarken: {
-        CRGB dst = leds[index];
-        leds[index] = CRGB(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b));
+        PixelType dst = leds[index];
+        leds[index] = PixelType(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b));
       }
       case blendAdd: {
-        CRGB dst = leds[index];
-        leds[index] = CRGB(min(0xFF, (uint16_t)src.r + (uint16_t)dst.r), min(0xFF, (uint16_t)src.g + (uint16_t)dst.g), min(0xFF, (uint16_t)src.b + (uint16_t)dst.b));
+        PixelType dst = leds[index];
+        leds[index] = PixelType(min(0xFF, (float)src.r + (float)dst.r), min(0xFF, (float)src.g + (float)dst.g), min(0xFF, (uint16_t)src.b + (uint16_t)dst.b));
       }
     }
   }
 
-  void point(int x, int y, CRGB src) {
+  void point(int x, int y, PixelType src) {
     point(x, y, src, drawStyle.blendMode);
   }
   
-  void line(float x1, float y1, float x2, float y2, CRGB src, bool antialias=false) {
+  void line(float x1, float y1, float x2, float y2, PixelType src, bool antialias=false) {
     // TODO: fix antialiasing for diagonal lines
     bool useY = (x1 == x2 || fabsf((y2 - y1) / (float)(x2 - x1)) > 1);
     if (useY) {
@@ -105,8 +106,8 @@ public:
           if (y < 0) {
             std::swap(partial1, partial2);
           }
-          CRGB src1 = src;
-          CRGB src2 = src;
+          PixelType src1 = src;
+          PixelType src2 = src;
           point(round(x), partial1, src1.nscale8_video(0xFF * (1-frac)), blendAdd);
           if (frac > 0) {
             point(round(x), partial2, src2.nscale8_video(0xFF * frac), blendAdd);
@@ -129,8 +130,8 @@ public:
           if (x < 0) {
             std::swap(partial1, partial2);
           }
-          CRGB src1 = src;
-          CRGB src2 = src;
+          PixelType src1 = src;
+          PixelType src2 = src;
           point(partial1, round(y), src1.nscale8_video(0xFF * (1-frac)), blendAdd);
           if (frac > 0) {
             point(partial2, round(y), src2.nscale8_video(0xFF * frac), blendAdd);
@@ -142,7 +143,7 @@ public:
     }
   }
 
-  void circle(float centerX, float centerY, float radius, int ndiv, bool fill, CRGB src) {
+  void circle(float centerX, float centerY, float radius, int ndiv, bool fill, PixelType src) {
     // TODO: use sin8 & cos8 for perf
     for (int t = 0; t < 360; t += 360/ndiv) {
       int x = round(cos(t*M_PI/180.) * radius + centerX);
@@ -158,4 +159,44 @@ public:
       }
     }
   }
+};
+
+typedef CustomDrawingContext< CRGB, CRGBArray<NUM_LEDS> > DrawingContext;
+
+/* Floating-point pixel buffer support */
+
+typedef struct FCRGB {
+  union {
+    struct {
+      union {
+        float r;
+        float red;
+      };
+      union {
+        float g;
+        float green;
+      };
+      union {
+        float b;
+        float blue;
+      };
+    };
+    float raw[3];
+  };
+public:
+  FCRGB() { }
+  FCRGB(CRGB color) : red(color.r), green(color.g), blue(color.b) { }
+  FCRGB(float r, float g, float b) : red(r), green(g), blue(b) { }
+  inline float& operator[] (uint8_t x) __attribute__((always_inline)) {
+    return raw[x];
+  }
+} FCRGB;
+
+template<int SIZE>
+class FCRGBArray {
+  FCRGB entries[SIZE];
+public:
+  inline FCRGB& operator[] (uint16_t x) __attribute__((always_inline)) {
+    return entries[x];
+  };
 };

@@ -88,7 +88,7 @@ void setup() {
       break;
     }
   }
-  logf("begin - waited %0.2fs for Serial", (millis()- setupStart) / 1000.);
+  logf("begin - waited %0.2fs for Serial", (millis() - setupStart) / 1000.);
 #elif DEBUG
   delay(2000);
 #endif

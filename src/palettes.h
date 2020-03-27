@@ -605,16 +605,16 @@ public:
   }
   
   T randomPalette(uint8_t minBrightness=0) {
-    unsigned choice;
-    T palette;
-    bool belowMinBrightness;
-    int tries = 0;
-    do {
-      choice = random16(gGradientPaletteCount);
+    unsigned firstChoice = random16(gGradientPaletteCount);
+    unsigned choice = firstChoice;
+    T palette = gGradientPalettes[choice];
+    bool belowMinBrightness = paletteHasColorBelowThreshold(palette, minBrightness);
+    while (belowMinBrightness) {
+      choice = addmod8(choice, 1, gGradientPaletteCount);
+      assert(choice != firstChoice, "No palettes of acceptible brightness");
       palette = gGradientPalettes[choice];
       belowMinBrightness = paletteHasColorBelowThreshold(palette, minBrightness);
-    } while (belowMinBrightness && tries++ < 10);
-    assert(tries < 10, "Tried too many times to pick a palette below threshold");
+    }
     logf("Picked Palette %u", choice);
     return palette;
   }

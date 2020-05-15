@@ -680,14 +680,18 @@ public:
     delete [] colorIndexes;
   }
   
+  void paletteRotationTick() {
+    EVERY_N_MILLISECONDS(40) {
+      nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
+    }
+    EVERY_N_SECONDS(secondsPerPalette) {
+      targetPalette = choosePalette();
+    }
+  }
+
   T getPalette() {
-      EVERY_N_MILLISECONDS(40) {
-        nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
-      }
-      EVERY_N_SECONDS(secondsPerPalette) {
-        targetPalette = choosePalette();
-      }
-      return currentPalette;
+    paletteRotationTick();
+    return currentPalette;
   }
 
   CRGB getPaletteColor(uint8_t n) {

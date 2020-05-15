@@ -707,7 +707,7 @@ public:
 // if it can be detected, then I can run idle behavior when it's absent. 
 // if toggled, that would enable e.g. Bars pattern to follow my motion with a tiny bit of inertia so it spins as I walk around, even slowly, or can be toggled off to just run idle
 
-class Droplets : public Pattern, public PaletteRotation<CRGBPalette256> {
+class Droplets : public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
 private:
   unsigned long lastDrop;
   unsigned long lastFlow;
@@ -716,9 +716,12 @@ private:
   CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> > *accumCtx;
   
   void flowDroplets(int i, int i2) {
+
+    // TODO: Look into replacing this with blur2d
+
     const float kFlow = 0.1;
     const float kEff = 0.70;
-    const float minLoss = 0.5;
+    const float minLoss = 1.5;
 
     FCRGB led1 = accumCtx->leds[i];
     FCRGB led2 = accumCtx->leds[i2];
@@ -739,21 +742,17 @@ private:
       if (srcSp && dstSp) {
         float flow = min(*srcSp, min((kFlow * *refSp), 0xFF - *dstSp));
         *dstSp += kEff * flow;
-        if (*srcSp > flow && *srcSp > minLoss) {
-          *srcSp -= max(minLoss, flow);
-        } else {
-          // attempt to avoid aliasing by not turning off subpixels
-          dimSrcSpCount++;
-        }
+        if (*dstSp < 0.001) *dstSp = 0;
+        *srcSp -= min(*srcSp, max(minLoss, flow));
       }
     }
-    if (dimSrcSpCount == 3) {
-      scratch[i2] = FCRGB(0,0,0);
-    }
   }
-
+  static const int fftBinCount = 10;
+  const float *levels = NULL;
 public:
-  Droplets() { }
+  Droplets() : PaletteRotation(minBrightness=15), FFTProcessing(&audioManager, fftBinCount) {
+    secondsPerPalette = 15;
+  }
   ~Droplets() {
     delete accumCtx;
   }
@@ -769,19 +768,44 @@ public:
     }
   }
 
+  float extraGain = 1.0;
   void update(DrawingContext &ctx) {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     const unsigned int dropInterval = 80;
     const unsigned int flowInterval = 30;
 
-    unsigned long mils = millis();
-    if (mils - lastDrop > dropInterval) {
-      float dropx = random16(ctx.width * 4) / 4.0;
-      float dropy = random16(ctx.height * 4) / 4.0;
-      CRGB color = getPaletteColor(random8());
-      accumCtx->circle(dropx, dropy, 2, 8, true, FCRGB(color));
-      lastDrop = mils;
+    paletteRotationTick();
+    
+    levels = NULL;
+    if (fftAvailable()) {
+      levels = fftLevels(2);
     }
+    
+    if (levels != NULL) {
+      for (int i = 0; i < fftBinCount; ++i) {
+        float level = levels[i] * extraGain;
+        if (level > 0.03) {
+          for (int p = 0; p < PANEL_COUNT; ++p) {
+            float dropx = 2*p * PANEL_WIDTH + (p?-1:1) * PANEL_WIDTH * i / (float)fftBinCount + (cos8(random8()) - 127) / 32;
+            float dropy = random16(ctx.height * 4) / 4.0;
+            CRGB color = getPaletteColor(i/(float)fftBinCount * 0x100);
+            color.nscale8_video(max(0, min(0xFF, 0xFF * level / 0.15)));
+            accumCtx->circle(dropx, dropy, min(2, min(4, level * 12)), 8, true, FCRGB(color));
+            fftSetLevelAccum(i, level / 2);
+          }
+        }
+      }
+    }
+
+    unsigned long mils = millis();
+    // if (mils - lastDrop > dropInterval) {
+    //   float dropx = random16(ctx.width * 4) / 4.0;
+    //   float dropy = random16(ctx.height * 4) / 4.0;
+    //   CRGB color = getPaletteColor(random8());
+    //   accumCtx->circle(dropx, dropy, 2, 8, true, FCRGB(color));
+    //   lastDrop = mils;
+    // }
+
     if (mils - lastFlow > flowInterval) {
       for (int i = 0; i < NUM_LEDS; ++i) {
         scratch[i] = accum[i];
@@ -808,10 +832,23 @@ public:
       }
       lastFlow  = mils;
     }
+    int ledsLit = 0;
     for (int i = 0; i < NUM_LEDS; ++i) {
         leds[i].red = ceilf(accumCtx->leds[i].red);
         leds[i].green = ceilf(accumCtx->leds[i].green);
         leds[i].blue = ceilf(accumCtx->leds[i].blue);
+
+        if (leds[i]) {
+          ledsLit++;
+        }
+    }
+    float litRatio = ledsLit / (float)NUM_LEDS;
+    const float litUpperThresh = 0.85;
+    if (litRatio > litUpperThresh) {
+      extraGain = max(0, extraGain - (litRatio - litUpperThresh) / 20);
+    }
+    if (ledsLit < 0.15 * NUM_LEDS && extraGain < 2) {
+      extraGain += 0.001 / (extraGain > 1 ? extraGain * extraGain : 1.0);
     }
   }
 

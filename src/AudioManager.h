@@ -33,6 +33,7 @@ public:
   
   void unsubscribe() {
     // FIXME: need a way to disable or pause fft, but may need to patch the audio library
+    // https://forum.pjrc.com/archive/index.php/t-33602.html
   }
 
   void tick() {
@@ -147,6 +148,10 @@ public:
 
   bool fftAvailable() {
     return fft1024_1.available();
+  }
+
+  void fftSetLevelAccum(unsigned int i, float value) {
+    levelsAccum[i] = value;
   }
 
   const float *fftLevels(unsigned int avgSamples=0) {

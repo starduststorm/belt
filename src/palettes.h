@@ -585,7 +585,7 @@ static int linearBrightness(CRGB color) {
 template <class T>
 class PaletteManager {
 private:
-  bool paletteHasColorBelowThreshold(T palette, uint8_t minBrightness) {
+  bool paletteHasColorBelowThreshold(T &palette, uint8_t minBrightness) {
     if (minBrightness == 0) {
       return false;
     }
@@ -596,6 +596,20 @@ private:
     }
     return false;
   }
+
+  uint8_t paletteColorJump(T& palette, bool wrapped=false) {
+    uint8_t maxJump = 0;
+    CRGB lastColor = palette.entries[(wrapped ? sizeof(T)/3 - 1 : 1)];
+    for (uint16_t i = (wrapped ? 0 : 1); i < sizeof(T)/3; ++i) {
+      CRGB color = palette.entries[i];
+      uint8_t distance = (abs((int)color.r - (int)lastColor.r) + abs((int)color.g - (int)lastColor.g) + abs((int)color.b - (int)lastColor.b)) / 3;
+      if (distance > maxJump) {
+        maxJump = distance;
+      }
+      lastColor = color;
+    }
+    return maxJump;
+  }
 public:  
   PaletteManager() {
   }
@@ -604,19 +618,22 @@ public:
     return gGradientPalettes[choice];
   }
   
-  T randomPalette(uint8_t minBrightness=0) {
+  void getRandomPalette(T* palettePtr, uint8_t minBrightness=0, uint8_t maxColorJump=0xFF) {
     unsigned firstChoice = random16(gGradientPaletteCount);
     unsigned choice = firstChoice;
-    T palette = gGradientPalettes[choice];
-    bool belowMinBrightness = paletteHasColorBelowThreshold(palette, minBrightness);
-    while (belowMinBrightness) {
+    *palettePtr = gGradientPalettes[choice];    
+    bool belowMinBrightness = paletteHasColorBelowThreshold(*palettePtr, minBrightness);
+    uint8_t colorJump = paletteColorJump(*palettePtr);
+    int tries = 0;
+    while (belowMinBrightness || colorJump > maxColorJump) {
       choice = addmod8(choice, 1, gGradientPaletteCount);
-      assert(choice != firstChoice, "No palettes of acceptible brightness");
-      palette = gGradientPalettes[choice];
-      belowMinBrightness = paletteHasColorBelowThreshold(palette, minBrightness);
+      assert(choice != firstChoice, "No palettes of acceptable brightness & color continuity");
+      *palettePtr = gGradientPalettes[choice];
+      belowMinBrightness = paletteHasColorBelowThreshold(*palettePtr, minBrightness);
+      colorJump = paletteColorJump(*palettePtr);
+      tries++;
     }
-    logf("Picked Palette %u", choice);
-    return palette;
+    logf("  Picked Palette %u, %i tries", choice, tries);
   }
 };
 
@@ -662,18 +679,19 @@ private:
   uint8_t *colorIndexes = NULL;
   uint8_t colorIndexCount = 0;
 
-  T choosePalette() {
-    return manager.randomPalette(minBrightness);
+  void assignPalette(T* palettePr) {
+    manager.getRandomPalette(palettePr, minBrightness, maxColorJump);
   }
 
 public:
   int secondsPerPalette = 10;
   uint8_t minBrightness = 0;
+  uint8_t maxColorJump = 0xFF;
   
   PaletteRotation(int minBrightness=0) {
     this->minBrightness = minBrightness;
-    currentPalette = choosePalette();
-    targetPalette = choosePalette();
+    assignPalette(&currentPalette);
+    assignPalette(&targetPalette);
   }
 
   ~PaletteRotation() {
@@ -685,7 +703,7 @@ public:
       nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
     }
     EVERY_N_SECONDS(secondsPerPalette) {
-      targetPalette = choosePalette();
+      assignPalette(&targetPalette);
     }
   }
 

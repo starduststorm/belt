@@ -374,7 +374,7 @@ public:
     const int xbucketSize = ctx.width / xbuckets;
     const int ybucketSize = ctx.height / ybuckets;
     
-    palette = paletteManager.randomPalette();
+    paletteManager.getRandomPalette(&palette);
     for (int i = 0; i < kBlobCount; ++i) {
       int xbucketStart = (i * xbucketSize) % ctx.width;
       int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);

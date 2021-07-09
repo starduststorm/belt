@@ -6,20 +6,23 @@ $fa = 3; // min segment/fragment size
 RAD = 180 / PI;
 DEG = 1;
 
-shell_thickness = 1.4;
-top_case_height = 8.2+shell_thickness; // rough measure
-bottom_case_height = 2+shell_thickness; // guesstimate
 board_thickness = 0.8;
+shell_thickness = 1.4;
 
-start_position = [119.38, 68.58, 0]; // pcb units
+top_case_height = 8.2+shell_thickness; // rough measure
+bottom_case_height = 2 /*rough for bottom components+pins*/ + shell_thickness + board_thickness;
 
-board_x_size = 167.64 - 119.38; // pcb units
-board_y_size = 139.065 - 68.58; // pcb units
+board_tolerance = 1;
+
+start_position = [119.38, 68.58, 0] /*pcb*/ - [board_tolerance/2,board_tolerance/2,0];
+
+board_x_size = 167.64 - 119.38 /*pcb units*/ + board_tolerance;
+board_y_size = 139.065 - 68.58 /*pcb units*/ + board_tolerance;
 //board_size = [board_x_size, board_y_size, board_thickness];
 
-screw_inner_radius = 0.96 /*measured*/ + 0.1 /*tolerance*/;
-screw_outer_radius = screw_inner_radius + shell_thickness;
-//screw_post_height = top_case_height + bottom_case_height + board_thickness;
+screw_radius = 0.96 /*measured*/ + 0.4 /*tolerance*/;
+screw_bump_inner_radius = 4 /*pcb*/ + 0.2 /*tolerance*/;
+screw_bump_outer_radius = screw_bump_inner_radius + shell_thickness;
 
 screw_positions = [ // pcb units
     [125.73, 69.215, 0] - start_position,
@@ -28,22 +31,39 @@ screw_positions = [ // pcb units
     [161.29, 138.43, 0] - start_position,
 ];
 
-module screw_posts(height) {
-    // screw posts
-        for (i = [0:3]) {
-            translate(screw_positions[i] + [0,0, height/2]) {
-                cylinder(h = height, r = screw_outer_radius, center = true);
-            }
+module arc(arcstart, arclen, height, r1, r2=0) {
+    rotate(arcstart, [0,0,1]) rotate_extrude(angle=arclen) polygon([[r1,0],[r2,0],[r2,height],[r1,height]]);
+}
+
+module screw_shell(height) {
+    // abandoned attempt to follow precise board curve. 
+//    arc1_offset = [125.73, -69.215, 0] - [121.92, -66.04, 0];
+//    arc2_offset = [125.73, -69.215, 0] - [129.54, -66.04, 0];
+//    
+//    arc_radius = 2.54;
+    
+    //            #translate(arc1_offset) arc(PI/2*RAD, PI/4*RAD, height, arc_radius-board_tolerance/2, arc_radius-shell_thickness-board_tolerance/2);
+
+    
+    union() for (i = [0:3]) {
+        translate(screw_positions[i]) {
+            translate([0,0, height/2]) cylinder(h = height, r = screw_bump_outer_radius, center = true);
         }
+    }
+}
+
+module screw_bump(height) {
+    union() for (i = [0:3]) {
+        translate(screw_positions[i] + [0,0, height/2]) {
+            cylinder(h = height, r = screw_bump_inner_radius, center = true);
+        }
+    }
 }
 
 module screw_holes(height) {
-    union() {
-        // screw holes
-        for (i = [0:3]) {
-            translate(screw_positions[i] + [0,0, height/2]) {
-                cylinder(h = height, r = screw_inner_radius, center = true);
-            }
+    union() for (i = [0:3]) {
+        translate(screw_positions[i] + [0,0, height/2]) {
+            cylinder(h = height, r = screw_radius, center = true);
         }
     }
 }
@@ -88,17 +108,18 @@ power_switch_cutout_position = [121.3, 75.4, 0] /*pcb*/ - start_position;
 power_switch_cutout_size = [3.85, 7.2, shell_thickness] /*measured*/ + [0.2, 0.2, 0.2] /*tolerance*/;
 
 teensy_usb_size = [7.9, shell_thickness+epsilon, 2.9];
-teensy_usb_position = [134.6, start_position.y-shell_thickness, 4-teensy_usb_size[2]] /*pcb,z-measured*/ - start_position;
+teensy_usb_position = [134.6 /*pcb*/, start_position.y-shell_thickness, 5.1-teensy_usb_size.z /*measured*/] - start_position;
 
 dial_1_position = [149.225 + 10.16, 83.185, 0] /*pcb*/ - start_position;
 dial_2_position = [149.225 + 10.16, 98.298, 0] /*pcb*/ - start_position;
-dial_radius = 7.2 /*measured*/;
+dial_radius = 7.2 /*measured*/ + 0.5 /*tolerance*/;
 
 wire_cutout_position_y = 132.75 /*pcb*/ - start_position.y;
 wire_cutout_radius = 2.75 /*pcb*/ + 0.4 /*extra for messy cables*/;
 
 button_column_radius = 2;
 button_column_height = top_case_height - (6.0 /*measured*/ - board_thickness);
+button_column_extra_height = 3; // I'm printing the top case upside down so this is fine, just need to flip it in the slicer
 button_position = [153.3, 72.4, 0] /*pcb*/ - start_position;
 
 board_corner_radius = 2.54 /*pcb*/;
@@ -110,7 +131,7 @@ translate([board_x_size*-1.1, 0, 0]) union() {
             // top (upside down) basic shape
             translate([-shell_thickness, -shell_thickness, 0])
                 rounded_rect([board_x_size + 2*shell_thickness, board_y_size + 2*shell_thickness, top_case_height], radius=shell_corner_radius);
-            screw_posts(top_case_height);
+            screw_shell(top_case_height);
         }
         union() diffscale() {
             // hollow shell
@@ -146,25 +167,28 @@ translate([board_x_size*-1.1, 0, 0]) union() {
             translate(button_position + [0,0,shell_thickness/2]) cylinder(h=shell_thickness+epsilon, r=4, center=true);
             
             // screws
-            screw_holes(top_case_height);
+            screw_holes(shell_thickness + epsilon);
+            translate([0,0,shell_thickness]) screw_bump(top_case_height - shell_thickness);
             
             // lettering
             fonts = [   "santa fe let",
                         "blackmoor let",
                         "snell roundhand",
                         "brushscipt mt",
-                        "jazz let",
                         "synchro let",
+                        "jazz let",
                         
                     ];
-            translate([board_x_size/3-2, board_y_size/4+3, 0.2]) rotate(PI*RAD, [0,1,0]) {
+            translate([board_x_size/3-3, board_y_size/4+2, 0.2]) rotate(PI*RAD, [0,1,0]) {
                 for (i = [0:len(fonts)-1]) {
-                    translate([-2*i,8*i,0]) linear_extrude(height=0.2, convexity=4)
+                    translate([-2*i,9*i,0]) linear_extrude(height=0.2, convexity=4)
                         text("motion", 
-                             size=7,
+                             size=8,
                              font=fonts[i],
                              halign="center",
-                             valign="center", $fn=1);
+                             valign="center", 
+                             spacing=1.1,
+                             $fn=1);
                 }
             }
         }
@@ -173,8 +197,10 @@ translate([board_x_size*-1.1, 0, 0]) union() {
     // button column
     translate(button_position) {
         translate([0,0,button_column_height/2]) cylinder(h=button_column_height, r=button_column_radius, center=true);
-        translate([-0.1,0.4,0]) spiral(1, 1.2, 1, shell_thickness);
-        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.2, 0.96, shell_thickness);
+        if (button_column_extra_height) 
+            cylinder(h=2*button_column_extra_height, r1=button_column_radius + button_column_extra_height/2, r2=0, center=true);
+        translate([-0.1,0.4,0]) spiral(1, 1.2, 1, 0.4);
+        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.2, 0.96, 0.4);
     }
 }
 
@@ -184,13 +210,15 @@ translate([board_x_size*0.0, 0, 0]) difference() {
         translate([-shell_thickness, -shell_thickness, 0])
             rounded_rect([board_x_size + 2*shell_thickness, board_y_size + 2*shell_thickness, bottom_case_height], radius=shell_corner_radius);
         // screws
-        screw_posts(bottom_case_height);
+        screw_shell(bottom_case_height);
     }
     diffscale() union() {
         // hollow out
         translate([0, 0, shell_thickness]) rounded_rect([board_x_size, board_y_size, bottom_case_height], radius=board_corner_radius);
         // screws
-        screw_holes(bottom_case_height);
+        screw_holes(shell_thickness + epsilon);
+        translate([0,0,shell_thickness]) screw_bump(bottom_case_height - shell_thickness);
+
     }
 }
  

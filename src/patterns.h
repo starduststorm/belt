@@ -725,7 +725,6 @@ private:
 
     FCRGB led1 = accumCtx->leds[i];
     FCRGB led2 = accumCtx->leds[i2];
-    int dimSrcSpCount = 0;
     for (uint8_t sp = 0; sp < 3; ++sp) { // each subpixel
       float *refSp = NULL;
       float *srcSp = NULL;
@@ -771,7 +770,6 @@ public:
   float extraGain = 1.0;
   void update(DrawingContext &ctx) {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
-    const unsigned int dropInterval = 80;
     const unsigned int flowInterval = 30;
 
     paletteRotationTick();
@@ -798,6 +796,9 @@ public:
     }
 
     unsigned long mils = millis();
+
+    // for non-sound-based droplets
+    // const unsigned int dropInterval = 80;
     // if (mils - lastDrop > dropInterval) {
     //   float dropx = random16(ctx.width * 4) / 4.0;
     //   float dropy = random16(ctx.height * 4) / 4.0;

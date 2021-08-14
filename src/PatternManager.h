@@ -9,12 +9,6 @@
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
-// Pattern *testIdlePattern = NULL;
-// Pattern *testIdlePattern = new Oscillators();
-// Pattern *testIdlePattern = new Sound();
-// Pattern *testIdlePattern = new Bars());
-Pattern *testIdlePattern = new Droplets();
-
 class PatternManager {
   int patternIndex = -1;
   Pattern *activePattern = NULL;
@@ -24,6 +18,19 @@ class PatternManager {
   template<class T>
   static Pattern *construct() {
     return new T();
+  }
+
+  // Make testIdlePattern in this constructor instead of at global so the Pattern doesn't get made at launch
+  Pattern *TestIdlePattern() {
+    static Pattern *testIdlePattern = NULL;
+    if (testIdlePattern == NULL) {
+      // testIdlePattern = NULL;
+      // testIdlePattern = new Oscillators();
+      // testIdlePattern = new Sound();
+      // testIdlePattern = new Bars());
+      testIdlePattern = new Droplets();
+    }
+    return testIdlePattern;
   }
 
 public:
@@ -83,7 +90,7 @@ public:
 
     // time out idle patterns
     if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {
-      if (activePattern != testIdlePattern && activePattern->wantsToIdleStop()) {
+      if (activePattern != TestIdlePattern() && activePattern->wantsToIdleStop()) {
         activePattern->stop();
         delete activePattern;
         activePattern = NULL;
@@ -92,8 +99,9 @@ public:
 
     // start a new random pattern if there is none
     if (activePattern == NULL) {
-      if (testIdlePattern) {
-        startPattern(testIdlePattern);
+      Pattern *testPattern = TestIdlePattern();
+      if (testPattern) {
+        startPattern(testPattern);
       } else {
         int choice = (int)random8(patternConstructors.size());
         startPatternAtIndex(choice);

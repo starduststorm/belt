@@ -3,12 +3,6 @@
 
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof(a[0]))
 
-#if DEBUG
-#define assert(expr, reason) if (!(expr)) { logf("ASSERTION FAILED: %s", reason); while (1) delay(100); }
-#else
-#define assert(expr, reason) if (!(expr)) { logf("ASSERTION FAILED: %s", reason); }
-#endif
-
 static int vasprintf(char** strp, const char* fmt, va_list ap) {
   va_list ap2;
   va_copy(ap2, ap);
@@ -24,18 +18,56 @@ static int vasprintf(char** strp, const char* fmt, va_list ap) {
   return vsnprintf(*strp, size, fmt, ap);
 }
 
-void logf(const char *format, ...)
+static void _logf(bool newline, const char *format, va_list argptr)
 {
-  va_list argptr;
-  va_start(argptr, format);
+  if (strlen(format) == 0) {
+    if (newline) {
+      Serial.println();
+    }
+    return;
+  }
   char *buf;
   vasprintf(&buf, format, argptr);
-  va_end(argptr);
-  Serial.println(buf ? buf : "LOGF MEMORY ERROR");
+  if (newline) {
+    Serial.println(buf ? buf : "LOGF MEMORY ERROR");
+  } else {
+    Serial.print(buf ? buf : "LOGF MEMORY ERROR");
+  }
 #if DEBUG
   Serial.flush();
 #endif
   free(buf);
+}
+
+void logf(const char *format, ...)
+{
+  va_list argptr;
+  va_start(argptr, format);
+  _logf(true, format, argptr);
+  va_end(argptr);
+}
+
+void loglf(const char *format, ...)
+{
+  va_list argptr;
+  va_start(argptr, format);
+  _logf(false, format, argptr);
+  va_end(argptr);
+}
+
+#define assert(expr, reasonFormat, ...) assert_func((expr), #expr, reasonFormat, ## __VA_ARGS__);
+
+void assert_func(bool result, const char *pred, const char *reasonFormat, ...) {
+  if (!result) {
+    logf("ASSERTION FAILED: %s", pred);
+    va_list argptr;
+    va_start(argptr, reasonFormat);
+    _logf(true, reasonFormat, argptr);
+    va_end(argptr);
+#if DEBUG
+    while (1) delay(100);
+#endif
+  }
 }
 
 #define MOD_DISTANCE(a, b, m) (m / 2. - fmod((3 * m) / 2 + a - b, m))

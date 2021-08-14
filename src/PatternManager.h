@@ -28,7 +28,7 @@ class PatternManager {
       // testIdlePattern = new Oscillators();
       // testIdlePattern = new Sound();
       // testIdlePattern = new Bars());
-      testIdlePattern = new Droplets();
+      // testIdlePattern = new Droplets();
     }
     return testIdlePattern;
   }

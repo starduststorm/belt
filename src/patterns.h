@@ -271,11 +271,13 @@ public:
   }
 
   ~Sound() {
-    
+    motionManager.unsubscribe();
   }
   
   void setup() {
     upsideDown = (random8(2) == 0);
+
+    motionManager.subscribe();
   }
   
   void update(DrawingContext &ctx) {
@@ -292,6 +294,11 @@ public:
     } else {
       framesWithoutAudioData++;
     }
+
+    sensors_event_t event;
+    motionManager.getEvent(&event);
+    int xOffset = event.orientation.x * TOTAL_WIDTH / 360;
+
     if (levels != NULL) {
       for (int x = 0; x < min(fftBinCount, PANEL_WIDTH); ++x) {
         float level = levels[x] * EXTRA_GAIN;
@@ -302,7 +309,7 @@ public:
 //            CRGB color = CHSV(20 * y, 0xFF, bright); // rainbow            
             CRGB color = getPaletteColor(map(y, 0, PANEL_HEIGHT-1, 0, 0xFF));
             color.nscale8_video(bright);
-            leds[ledxy(x + p * PANEL_WIDTH, (upsideDown ? TOTAL_HEIGHT - y - 1 : y))] = color;
+            leds[ledxy((x + p * PANEL_WIDTH + xOffset) % TOTAL_WIDTH, (upsideDown ? TOTAL_HEIGHT - y - 1 : y))] = color;
           }
         }
       }

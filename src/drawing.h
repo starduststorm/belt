@@ -100,7 +100,8 @@ public:
         // TODO: can I do this without the float divisions?
         float x = x1 + (y - y1) / (float)(y2 - y1) * (x2 - x1);
         if (antialias) {
-          float frac = fabsf(modff(y, NULL));
+          float iptr;
+          float frac = fabsf(modff(y, &iptr));
           float partial1 = floorf(y);
           float partial2 = ceilf(y);
           if (y < 0) {
@@ -124,7 +125,8 @@ public:
       for (float x = x1; x <= x2 + 0.0001; ++x) {
         float y = y1 + (x - x1) / (float)(x2 - x1) * (y2 - y1);
         if (antialias) {
-          float frac = fabsf(modff(x, NULL));
+          float iptr;
+          float frac = fabsf(modff(x, &iptr));
           float partial1 = floorf(x);
           float partial2 = ceilf(x);
           if (x < 0) {

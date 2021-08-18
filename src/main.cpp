@@ -25,14 +25,13 @@
 #include "AudioManager.h"
 #include "controls.h"
 
-CRGBArray<NUM_LEDS> leds;
-DrawingContext *drawingContext;
+DrawingContext ctx(TOTAL_WIDTH, TOTAL_HEIGHT);
 
 /* ---------------------- */
 
 FrameCounter fc;
 HardwareControls controls;
-PatternManager patternManager;
+PatternManager<DrawingContext> patternManager(ctx);
 
 #define UNCONNECTED_PIN_1 A9
 #define UNCONNECTED_PIN_2 A3
@@ -99,10 +98,9 @@ void setup() {
   // FIXME: TypicalSMD5050 color correction produces reds at very low brightness levels, such that fading a white pixel down to black produces red at the end.
   // This is very undesirable, so I'd rather use uncorrected colors .setCorrection((UncorrectedColor).
   //.setCorrection(TypicalSMD5050);
-  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(leds, PANEL_LEDS);
+  FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(ctx.leds, PANEL_LEDS);
 
-  drawingContext = new DrawingContext(leds, TOTAL_WIDTH, TOTAL_HEIGHT);
-  patternManager.drawingContext = drawingContext;
+  patternManager.ctx = ctx;
 
   fc.tick();
   SPSTButton *button = controls.addButton(BUTTON_PIN);
@@ -120,10 +118,10 @@ void setup() {
 }
 
 void serialTimeoutIndicator() {
-  leds.fill_solid(CRGB::Black);
+  ctx.leds.fill_solid(CRGB::Black);
   if ((millis() - setupDoneTime) % 250 < 100) {
     for (int p = 0; p < PANEL_COUNT; ++p) {
-      drawingContext->line(p*PANEL_WIDTH, 0, p*PANEL_WIDTH, PANEL_HEIGHT-1, CRGB::Red);
+      ctx.line(p*PANEL_WIDTH, 0, p*PANEL_WIDTH, PANEL_HEIGHT-1, CRGB::Red);
     }
   }
   FastLED.show();
@@ -142,10 +140,10 @@ void loop() {
   
   // Rotate Panel 0 since it's mounted upside down
   CRGBArray<PANEL_LEDS> panelCopy;
-  panelCopy = leds(0, PANEL_LEDS-1);
+  panelCopy = ctx.leds(0, PANEL_LEDS-1);
   for (int x = 0; x < PANEL_WIDTH; ++x) {
     for (int y = 0; y < PANEL_HEIGHT; ++y) {
-      leds[ledxy(x,y)] = panelCopy[ledxy(PANEL_WIDTH-x-1, PANEL_HEIGHT-y-1)];
+      ctx.leds[ledxy(x,y)] = panelCopy[ledxy(PANEL_WIDTH-x-1, PANEL_HEIGHT-y-1)];
     }
   }
 

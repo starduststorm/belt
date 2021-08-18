@@ -9,6 +9,7 @@
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
+template <typename BufferType>
 class PatternManager {
   int patternIndex = -1;
   Pattern *activePattern = NULL;
@@ -34,9 +35,9 @@ class PatternManager {
   }
 
 public:
-  DrawingContext *drawingContext;
+  BufferType &ctx;
 
-  PatternManager() {
+  PatternManager(BufferType &ctx) : ctx(ctx) {
     patternConstructors.push_back(&(construct<SmoothPalettes>));
     patternConstructors.push_back(&(construct<PixelDust>));
     patternConstructors.push_back(&(construct<Bars>));
@@ -75,7 +76,7 @@ public:
 
   bool startPattern(Pattern *pattern) {
     if (pattern->wantsToRun()) {
-      pattern->start(*drawingContext);
+      pattern->start(ctx);
       activePattern = pattern;
       return true;
     } else {
@@ -85,7 +86,7 @@ public:
 
   void loop() {
     if (activePattern) {
-      activePattern->loop(*drawingContext);
+      activePattern->loop(ctx);
     }
 
     // time out idle patterns

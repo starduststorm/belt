@@ -26,8 +26,8 @@ private:
 public:
   DrawStyle drawStyle;
   int width, height;
-  BufferType &leds;
-  CustomDrawingContext(BufferType &leds, unsigned width, unsigned height) : leds(leds) {
+  BufferType leds;
+  CustomDrawingContext(unsigned width, unsigned height) {
     this->width = width;
     this->height = height;
   }

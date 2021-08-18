@@ -720,7 +720,6 @@ private:
   unsigned long lastDrop;
   unsigned long lastFlow;
   FCRGB scratch[NUM_LEDS];
-  FCRGBArray<NUM_LEDS> accum;
   CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> > *accumCtx;
   
   void flowDroplets(int i, int i2) {
@@ -767,7 +766,7 @@ public:
   }
 
   void setup(DrawingContext &ctx) {
-    accumCtx = new CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> >(accum, ctx.width, ctx.height);
+    accumCtx = new CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> >(ctx.width, ctx.height);
 
     // copy the whole standard pixel buffer into a floating-point pixel buffer
     for (int i = 0; i < NUM_LEDS; ++i) {
@@ -819,7 +818,7 @@ public:
 
     if (mils - lastFlow > flowInterval) {
       for (int i = 0; i < NUM_LEDS; ++i) {
-        scratch[i] = accum[i];
+        scratch[i] = accumCtx->leds[i];
       }
       for (int p = 0; p < PANEL_COUNT; ++p) {
         for (int x = 0; x < PANEL_WIDTH; ++x) {

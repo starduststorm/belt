@@ -295,10 +295,6 @@ public:
       framesWithoutAudioData++;
     }
 
-    sensors_event_t event;
-    motionManager.getEvent(&event);
-    int xOffset = event.orientation.x * TOTAL_WIDTH / 360;
-
     if (levels != NULL) {
       for (int x = 0; x < min(fftBinCount, PANEL_WIDTH); ++x) {
         float level = levels[x] * EXTRA_GAIN;
@@ -309,11 +305,16 @@ public:
 //            CRGB color = CHSV(20 * y, 0xFF, bright); // rainbow            
             CRGB color = getPaletteColor(map(y, 0, PANEL_HEIGHT-1, 0, 0xFF));
             color.nscale8_video(bright);
-            leds[ledxy((x + p * PANEL_WIDTH + xOffset) % TOTAL_WIDTH, (upsideDown ? TOTAL_HEIGHT - y - 1 : y))] = color;
+            leds[ledxy(x + p * PANEL_WIDTH, (upsideDown ? TOTAL_HEIGHT - y - 1 : y))] = color;
           }
         }
       }
     }
+
+    sensors_event_t event;
+    motionManager.getEvent(&event);
+    float xOffset = event.orientation.x * TOTAL_WIDTH / 360;
+    ctx.shift_buffer(-xOffset,0);
     
     EVERY_N_MILLISECONDS(5000) {
       audioManager.printStatistics();
@@ -758,9 +759,11 @@ private:
 public:
   Droplets() : PaletteRotation(minBrightness=15), FFTProcessing(&audioManager, fftBinCount) {
     secondsPerPalette = 15;
+    motionManager.subscribe();
   }
   ~Droplets() {
     delete accumCtx;
+    motionManager.unsubscribe();
   }
 
   void setup(DrawingContext &ctx) {
@@ -858,6 +861,11 @@ public:
     if (ledsLit < 0.15 * NUM_LEDS && extraGain < 2) {
       extraGain += 0.001 / (extraGain > 1 ? extraGain * extraGain : 1.0);
     }
+
+    sensors_event_t event;
+    motionManager.getEvent(&event);
+    float xOffset = event.orientation.x * TOTAL_WIDTH / 360;
+    ctx.shift_buffer(-xOffset,0);
   }
 
   const char *description() {

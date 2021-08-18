@@ -31,6 +31,37 @@ public:
     this->width = width;
     this->height = height;
   }
+
+  void shift_buffer(float xshift, float yshift) {
+    xshift = fmod_wrap(xshift, width);
+    yshift = fmod_wrap(yshift, height);
+    BufferType oldleds;
+    oldleds = leds;
+    
+    float xshift_whole;
+    float xshift_frac = fabsf(modff(xshift, &xshift_whole));
+    uint8_t xshift_frac8 = xshift_frac * 0xFF;
+
+    float yshift_whole;
+    float yshift_frac = fabsf(modff(yshift, &yshift_whole));
+    uint8_t yshift_frac8 = yshift_frac * 0xFF;
+
+    for (int x = 0; x < width; ++x) {
+      for (int y = 0; y < height; ++y) {
+        CRGB samples[4];
+        samples[0] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole, true)];
+        samples[1] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole, true)];
+        samples[2] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole - (int)ceilf(yshift_frac), true)];
+        samples[3] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole - (int)ceilf(yshift_frac), true)];
+
+        CRGB ref1 = blend(samples[0], samples[1], xshift_frac8);
+        CRGB ref2 = blend(samples[2], samples[3], xshift_frac8);
+        CRGB newpx = blend(ref1, ref2, yshift_frac8);
+
+        leds[ledxy(x,y)] = newpx;
+      }
+    }
+  }
   
   void blendMode(BlendMode mode) {
     drawStyle.blendMode = mode;

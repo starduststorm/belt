@@ -78,11 +78,13 @@ inline int mod_wrap(int x, int m) {
 }
 
 inline float fmod_wrap(float x, int m) {
-  float result = fmod(x, m);
+  float result = fmodf(x, m);
   return result < 0 ? result + m : result;
 }
 
-inline unsigned int ledxy(int x, int y) {
+inline unsigned int ledxy(int x, int y, bool wrap=false) {
+  if (wrap) x = mod_wrap(x, TOTAL_WIDTH);
+  if (wrap) y = mod_wrap(y, TOTAL_HEIGHT);
   // support zigzag
 #if DEBUG
   if (x < 0 || x >= PANEL_WIDTH * PANEL_COUNT) {
@@ -129,6 +131,14 @@ class FrameCounter {
       lastClamp = millis();
     }
 };
+
+void printColor(CRGB color) {
+  loglf("CRGB(0x%x, 0x%x, 0x%x)", color.r, color.g, color.b);
+}
+
+void printColor(CHSV color) {
+  loglf("CHSV(0x%x, 0x%x, 0x%x)", color.h, color.s, color.v);
+}
 
 int lsb_noise(int pin, int numbits) {
   // TODO: Use Entropy.h? Probs not needed just to randomize pattern.

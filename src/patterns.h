@@ -260,17 +260,17 @@ class Bits : public Pattern {
 
 #define EXTRA_GAIN 200
 
-class Sound: public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
+class SpectrumAnalyzer: public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
 private:
   static const int fftBinCount = PANEL_WIDTH;
   int framesWithoutAudioData = 0;
   const float *levels = NULL;
   bool upsideDown = false;
 public:
-  Sound() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBinCount) {
+  SpectrumAnalyzer() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBinCount) {
   }
 
-  ~Sound() {
+  ~SpectrumAnalyzer() {
     motionManager.unsubscribe();
   }
   
@@ -322,7 +322,7 @@ public:
   }
   
   const char *description() {
-    return "Sound";
+    return "SpectrumAnalyzer";
   }
 };
 

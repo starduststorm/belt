@@ -27,7 +27,7 @@ class PatternManager {
     if (testIdlePattern == NULL) {
       // testIdlePattern = NULL;
       // testIdlePattern = new Oscillators();
-      // testIdlePattern = new Sound();
+      // testIdlePattern = new SpectrumAnalyzer();
       // testIdlePattern = new Bars());
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
@@ -43,7 +43,7 @@ public:
     patternConstructors.push_back(&(construct<PixelDust>));
     patternConstructors.push_back(&(construct<Bars>));
     patternConstructors.push_back(&(construct<Oscillators>));
-    patternConstructors.push_back(&(construct<Sound>));
+    patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
     patternConstructors.push_back(&(construct<Droplets>));
     
     // patternConstructors.push_back(&(PatternManager::construct<Bits>));

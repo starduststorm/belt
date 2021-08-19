@@ -74,6 +74,12 @@ void thumbdial1Change(int val) {
   globalBrightness = val;
 }
 
+void thumbdial2Change(int val) {
+  float gain = 0.01 + val * 1.2 / 1023;
+  logf("set extra gain: %f", gain);
+  audioManager.setExtraGain(gain);
+}
+
 static bool serialTimeout = false;
 static unsigned long setupDoneTime;
 
@@ -111,6 +117,9 @@ void setup() {
 
   AnalogDial *brightnessDial = controls.addAnalogDial(THUMBDIAL1_PIN);
   brightnessDial->onChange(&thumbdial1Change);
+
+  AnalogDial *audioGainDial = controls.addAnalogDial(THUMBDIAL2_PIN);
+  audioGainDial->onChange(&thumbdial2Change);
   
   controls.update();
 

@@ -19,6 +19,7 @@ AudioConnection          patchCord3(i2s1, peak1);
 class AudioManager {
 private:
   float gain = 10.0;
+  float extraGain = 0;
   float peakAccum = 0;
 public:
   AudioManager() {
@@ -36,6 +37,11 @@ public:
     // https://forum.pjrc.com/archive/index.php/t-33602.html
   }
 
+  void setExtraGain(float extraGain) {
+    this->extraGain = extraGain;
+    amp1.gain(gain * extraGain);
+  }
+
   void tick() {
     const int peakSamples = 30;
     EVERY_N_MILLIS(1000/60.) {
@@ -49,7 +55,7 @@ public:
       }
     }
     EVERY_N_SECONDS(1) {
-      amp1.gain(gain);
+      amp1.gain(gain * extraGain);
     }
   }
 

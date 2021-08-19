@@ -19,23 +19,48 @@ public:
   bool wrap = false;
 };
 
-template<class PixelType, class BufferType>
+template<unsigned WIDTH, unsigned HEIGHT, class PixelType, class PixelSetType>
 class CustomDrawingContext {
 private:
   std::stack<DrawStyle> styleStack;
+
+  void set_px(PixelType src, int index, BlendMode blendMode, uint8_t brightness) {
+    src.nscale8(brightness);
+    switch (blendMode) {
+      case blendSourceOver:
+        leds[index] = src;
+        break;
+      case blendBrighten: {
+        PixelType dst = leds[index];
+        leds[index] = PixelType(std::max(src.r, dst.r), std::max(src.g, dst.g), std::max(src.b, dst.b));
+        break;
+      }
+      case blendDarken: {
+        PixelType dst = leds[index];
+        leds[index] = PixelType(std::min(src.r, dst.r), std::min(src.g, dst.g), std::min(src.b, dst.b));
+      }
+      case blendAdd: {
+        PixelType dst = leds[index];
+        // FIXME: float hard coded
+        leds[index] = PixelType(min(0xFF, (float)src.r + (float)dst.r), min(0xFF, (float)src.g + (float)dst.g), min(0xFF, (float)src.b + (float)dst.b));
+      }
+
+    }
+  }
+
 public:
   DrawStyle drawStyle;
   int width, height;
-  BufferType leds;
-  CustomDrawingContext(unsigned width, unsigned height) {
-    this->width = width;
-    this->height = height;
+  PixelSetType leds;
+  CustomDrawingContext() {
+    this->width = WIDTH;
+    this->height = HEIGHT;
   }
 
   void shift_buffer(float xshift, float yshift) {
     xshift = fmod_wrap(xshift, width);
     yshift = fmod_wrap(yshift, height);
-    BufferType oldleds;
+    PixelSetType oldleds;
     oldleds = leds;
     
     float xshift_whole;
@@ -60,6 +85,13 @@ public:
 
         leds[ledxy(x,y)] = newpx;
       }
+    }
+  }
+
+  void blendIntoContext(CustomDrawingContext<WIDTH, HEIGHT, PixelType, PixelSetType> &otherContext, BlendMode blendMode, uint8_t brightness=0xFF) {
+    assert(otherContext.leds.size() == this->leds.size(), "context blending requires same-size buffers");
+    for (int i = 0; i < leds.size(); ++i) {
+      otherContext.set_px(leds[i], i, blendMode, brightness);
     }
   }
   
@@ -92,22 +124,7 @@ public:
       assert(y >=0 && y < height, "point: y out of bounds");
     }
     int index = ledxy(x,y);
-    switch (blendMode) {
-      case blendSourceOver: leds[index] = src; break;
-      case blendBrighten: {
-        PixelType dst = leds[index];
-        leds[index] = PixelType(max(src.r, dst.r), max(src.g, dst.g), max(src.b, dst.b));
-        break;
-      }
-      case blendDarken: {
-        PixelType dst = leds[index];
-        leds[index] = PixelType(min(src.r, dst.r), min(src.g, dst.g), min(src.b, dst.b));
-      }
-      case blendAdd: {
-        PixelType dst = leds[index];
-        leds[index] = PixelType(min(0xFF, (float)src.r + (float)dst.r), min(0xFF, (float)src.g + (float)dst.g), min(0xFF, (uint16_t)src.b + (uint16_t)dst.b));
-      }
-    }
+    set_px(src, index, blendMode, 0xFF);
   }
 
   void point(int x, int y, PixelType src) {
@@ -194,7 +211,7 @@ public:
   }
 };
 
-typedef CustomDrawingContext< CRGB, CRGBArray<NUM_LEDS> > DrawingContext;
+typedef CustomDrawingContext< TOTAL_WIDTH, TOTAL_HEIGHT, CRGB, CRGBArray<NUM_LEDS> > DrawingContext;
 
 /* Floating-point pixel buffer support */
 
@@ -222,6 +239,12 @@ public:
   FCRGB(float r, float g, float b) : red(r), green(g), blue(b) { }
   inline float& operator[] (uint8_t x) __attribute__((always_inline)) {
     return raw[x];
+  }
+  void nscale8(uint8_t brightness) {
+    float scale = (float)brightness / 0xFF;
+    r *= scale;
+    g *= scale;
+    b *= scale;
   }
 } FCRGB;
 

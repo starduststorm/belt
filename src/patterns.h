@@ -26,17 +26,18 @@ private:
   long stopTime = -1;
   long lastUpdateTime = -1;
 public:
+  DrawingContext ctx;
   virtual ~Pattern() { }
 
-  void start(DrawingContext &ctx) {
+  void start() {
     logf("Starting %s", description());
     startTime = millis();
     stopTime = -1;
-    setup(ctx);
+    setup();
   }
 
-  void loop(DrawingContext &ctx) {
-    update(ctx);
+  void loop() {
+    update();
     lastUpdateTime = millis();
   }
 
@@ -49,9 +50,6 @@ public:
     return true;
   }
 
-  virtual void setup(DrawingContext &ctx) { 
-    setup();
-  }
   virtual void setup() { }
 
   void stop() {
@@ -59,7 +57,7 @@ public:
     startTime = -1;
   }
 
-  virtual void update(DrawingContext &ctx) { }
+  virtual void update() { }
   
   virtual const char *description() = 0;
 
@@ -215,7 +213,7 @@ class Bits : public Pattern {
       lastBitCreation = 0;
     }
 
-    void update(DrawingContext &ctx) {
+    void update() {
       CRGBArray<NUM_LEDS> leds = ctx.leds;
       unsigned long mils = millis();
       bool hasAliveBit = false;
@@ -280,7 +278,7 @@ public:
     motionManager.subscribe();
   }
   
-  void update(DrawingContext &ctx) {
+  void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     leds.fill_solid(CRGB::Black);
     
@@ -328,98 +326,126 @@ public:
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-class Motion : public Pattern {
-  float kMotionThreshold = 2.0;
+class MotionBlobs : public Pattern, public PaletteRotation<CRGBPalette256>  {
+  float kMotionThreshold = 2.0; // FIXME: not used, replace with opt-in feature that pattern manager can use?
 private:
   class MotionBlob {
+    
+    public:
+    enum Shape { rect22, arrow } shape;
     int y;
     int x;
-    float xfact;
-  public:
     CRGB color;
-    void reset(int x, int y, CRGB color) {
+
+    void reset(int x, int y, CRGB color, Shape shape) {
       this->x = x;
       this->y = y;
       this->color = color;
-      xfact = random8() / 255. + 0.5;
+      this->shape = shape;
     }
     
-    void update(DrawingContext &ctx, float theta, float dtheta) {
-      // TODO: this needs to be tuned to compensate for the total angle the leds will occupy in the circle
-      int x_offset = xfact * map(theta, -180, 180, 0, ctx.width);
+    void update(DrawingContext ctx, float theta, float dtheta) {
+      ctx.pushStyle();
+      ctx.drawStyle.wrap = true;
+      // TODO: mod where this compensates for the total angle the leds will occupy in the circle
+      float px = x + theta * TOTAL_WIDTH / 360;
       
-      int brightness = min(0xFF, 100 * (dtheta - 1));
+      int brightness = 0xFF;//min(0xFF, 100 * (dtheta - 1));
       CRGB dimmedColor = color;
       dimmedColor.nscale8_video(brightness);
 
-      int px =  (x + x_offset) % ctx.width;
-      int px2 = (x + x_offset + 1) % ctx.width;
+      switch (shape) {
+        case rect22: {
+          ctx.point(px,  y,   dimmedColor);
+          ctx.point(px+1, y,   dimmedColor);
+          ctx.point(px,  y+1, dimmedColor);
+          ctx.point(px+1, y+1, dimmedColor);
+          break;
+        }
+        case arrow: {
+          float bend = min(1.0, max(-1.0, 2*dtheta));
 
-      ctx.point(px,  y,   dimmedColor);
-      ctx.point(px2, y,   dimmedColor);
-      ctx.point(px,  y+1, dimmedColor);
-      ctx.point(px2, y+1, dimmedColor);
+          for (int y = 0; y < ctx.height; ++y) {
+            if (y < ctx.height/2) {
+              px += 1 * bend;
+            } else if (y > ctx.height/2) {
+              px -= 1 * bend;
+            }
+            float arrowstart = px - 2 * bend;
+
+            float iptr;
+            float frac = modff(arrowstart, &iptr);
+            CRGB c1 = dimmedColor;
+            CRGB c2 = dimmedColor;
+            c1.nscale8_video(max(1, (1 - frac) * 0xFF));
+            c2.nscale8_video(max(1, (frac * 0xFF)));
+            ctx.point((int)iptr, (int)y, c1, blendBrighten);
+            ctx.point((int)ceilf(arrowstart), (int)y, c2, blendBrighten);
+
+          }
+          break;
+        }
+      }
+      ctx.popStyle();
     }
   };
   
 public:
-  const int kBlobCount = 16;
+  const int kBlobCount = 8;
   const int kBlobsResetTimeout = 5000;
-  MotionBlob *blobs;
-  CRGBPalette16 palette;
+  MotionBlob *blobs = NULL;
   long lastDisplay = -kBlobsResetTimeout;
 
-  ~Motion() {
+  MotionBlobs() : PaletteRotation(minBrightness=10) {
+    blobs = new MotionBlob[kBlobCount];
+  }
+
+  ~MotionBlobs() {
     motionManager.unsubscribe();
     delete [] blobs;
   }
 
-  void resetBlobs(DrawingContext &ctx) {
+  void resetBlobs() {
     // space out the blobs so they don't overlap
     const int ybuckets = 2;
-    const int xbuckets = kBlobCount / ybuckets;
+    const int xbuckets = kBlobCount;
 
     const int xbucketSize = ctx.width / xbuckets;
-    const int ybucketSize = ctx.height / ybuckets;
+    // const int ybucketSize = ctx.height / ybuckets;
     
-    paletteManager.getRandomPalette(&palette);
     for (int i = 0; i < kBlobCount; ++i) {
       int xbucketStart = (i * xbucketSize) % ctx.width;
-      int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);
-      EVERY_N_MILLISECONDS(1000) {
-        logf("ybucketStart = %i", ybucketStart);
-      }
-      int x = xbucketStart + random8(xbucketSize);
-      int y = ybucketStart + random8(ybucketSize - 1);
-      CRGB color = ColorFromPalette(palette, random8());
+      // int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);
+
+      int x = xbucketStart;// + random8(xbucketSize);
+      int y = 0;//ybucketStart + random8(ybucketSize - 1);
       
-      blobs[i].reset(x, y, color);
+      blobs[i].reset(x, y, getPaletteColor(random8()), MotionBlob::arrow);
     }
   }
   
   void setup() {
     motionManager.subscribe();
-    assert(blobs == NULL, "MotionBlobs array not nulled");
-    blobs = new MotionBlob[kBlobCount];
   }
 
-  void update(DrawingContext &ctx) {
-    ctx.leds.fadeToBlackBy(25);
+  void update() {
+    ctx.leds.fadeToBlackBy(50);
 
     if (lastDisplay != -1 && millis() - lastDisplay > 5000) {
-      resetBlobs(ctx);
+      resetBlobs();
       lastDisplay = -1;
     }
 
     float orientation;
-    float twirlSpeed = fabsf(motionManager.twirlVelocity(5, &orientation));
+    float twirlVelocity = motionManager.twirlVelocity(10, &orientation);
 
-    if (twirlSpeed > kMotionThreshold) {
+    if (true || fabsf(twirlVelocity) > kMotionThreshold) {
       ctx.pushStyle();
       ctx.blendMode(blendBrighten);
       for (int i = 0; i < kBlobCount; ++i) {
         MotionBlob *blob = &blobs[i];
-        blob->update(ctx, orientation, twirlSpeed);
+        blob->color = getPaletteColor(beatsin8(3));
+        blob->update(ctx, orientation, twirlVelocity);
       }
       ctx.popStyle();
       lastDisplay = millis();
@@ -431,7 +457,7 @@ public:
   }
 
   const char *description() {
-    return "Motion";
+    return "MotionBlobs";
   }
 };
 
@@ -452,7 +478,7 @@ public:
     motionManager.unsubscribe();
   }
 
-  void setup(DrawingContext &ctx) {
+  void setup() {
     numBars = ctx.width / kBarWidth / 2 * ctx.height;
 
     prepareTrackedColors(numBars);
@@ -468,7 +494,7 @@ public:
     motionManager.subscribe();
   }
   
-  void update(DrawingContext &ctx) {
+  void update() {
     ctx.leds.fill_solid(CRGB::Black);
 
     EVERY_N_MILLISECONDS(40) {
@@ -524,12 +550,12 @@ public:
     motionManager.unsubscribe();
   }
 
-  void setup(DrawingContext &ctx) {
+  void setup() {
     motionManager.subscribe();
     usePalette = random8(2) == 0;
   }
 
-  void update(DrawingContext &ctx) {
+  void update() {
     for (int index = 0; index < ctx.width * ctx.height; ++index) {
       // this looks cool for a good long time
 //      int r = 0;//beatsin16(millis() / 15 + 5 * index) >> 8;
@@ -597,7 +623,7 @@ class RainbowMotion : public Pattern {
     motionManager.subscribe();
   }
 
-  void update(DrawingContext &ctx) {
+  void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     sensors_event_t event; 
     motionManager.getEvent(&event);
@@ -666,7 +692,7 @@ public:
     motionManager.subscribe();
   }
 
-  void update(DrawingContext &ctx) {
+  void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     dimension_t x, y;
     sensors_event_t accel;
@@ -744,7 +770,7 @@ private:
   unsigned long lastDrop;
   unsigned long lastFlow;
   FCRGB scratch[NUM_LEDS];
-  CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> > *accumCtx;
+  CustomDrawingContext< TOTAL_WIDTH, TOTAL_HEIGHT, FCRGB, FCRGBArray<NUM_LEDS> > accumCtx;
   
   void flowDroplets(int i, int i2) {
 
@@ -754,8 +780,8 @@ private:
     const float kEff = 0.70;
     const float minLoss = 1.5;
 
-    FCRGB led1 = accumCtx->leds[i];
-    FCRGB led2 = accumCtx->leds[i2];
+    FCRGB led1 = accumCtx.leds[i];
+    FCRGB led2 = accumCtx.leds[i2];
     for (uint8_t sp = 0; sp < 3; ++sp) { // each subpixel
       float *refSp = NULL;
       float *srcSp = NULL;
@@ -785,23 +811,20 @@ public:
     motionManager.subscribe();
   }
   ~Droplets() {
-    delete accumCtx;
     motionManager.unsubscribe();
   }
 
-  void setup(DrawingContext &ctx) {
-    accumCtx = new CustomDrawingContext< FCRGB, FCRGBArray<NUM_LEDS> >(ctx.width, ctx.height);
-
+  void setup() {
     // copy the whole standard pixel buffer into a floating-point pixel buffer
     for (int i = 0; i < NUM_LEDS; ++i) {
-      accumCtx->leds[i].red = ctx.leds[i].r;
-      accumCtx->leds[i].green = ctx.leds[i].g;
-      accumCtx->leds[i].blue = ctx.leds[i].b;
+      accumCtx.leds[i].red = ctx.leds[i].r;
+      accumCtx.leds[i].green = ctx.leds[i].g;
+      accumCtx.leds[i].blue = ctx.leds[i].b;
     }
   }
 
   float extraGain = 1.0;
-  void update(DrawingContext &ctx) {
+  void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     const unsigned int flowInterval = 30;
 
@@ -821,7 +844,7 @@ public:
             float dropy = random16(ctx.height * 4) / 4.0;
             CRGB color = getPaletteColor(i/(float)fftBinCount * 0x100);
             color.nscale8_video(max(0, min(0xFF, 0xFF * level / 0.15)));
-            accumCtx->circle(dropx, dropy, min(2, min(4, level * 12)), 8, true, FCRGB(color));
+            accumCtx.circle(dropx, dropy, min(2, min(4, level * 12)), 8, true, FCRGB(color));
             fftSetLevelAccum(i, level / 2);
           }
         }
@@ -842,7 +865,7 @@ public:
 
     if (mils - lastFlow > flowInterval) {
       for (int i = 0; i < NUM_LEDS; ++i) {
-        scratch[i] = accumCtx->leds[i];
+        scratch[i] = accumCtx.leds[i];
       }
       for (int p = 0; p < PANEL_COUNT; ++p) {
         for (int x = 0; x < PANEL_WIDTH; ++x) {
@@ -862,15 +885,15 @@ public:
         }
       }
       for (int i = 0; i < NUM_LEDS; ++i) {
-        accumCtx->leds[i] = scratch[i];
+        accumCtx.leds[i] = scratch[i];
       }
       lastFlow  = mils;
     }
     int ledsLit = 0;
     for (int i = 0; i < NUM_LEDS; ++i) {
-        leds[i].red = ceilf(accumCtx->leds[i].red);
-        leds[i].green = ceilf(accumCtx->leds[i].green);
-        leds[i].blue = ceilf(accumCtx->leds[i].blue);
+        leds[i].red = ceilf(accumCtx.leds[i].red);
+        leds[i].green = ceilf(accumCtx.leds[i].green);
+        leds[i].blue = ceilf(accumCtx.leds[i].blue);
 
         if (leds[i]) {
           ledsLit++;
@@ -907,7 +930,7 @@ class SmoothPalettes : public Pattern {
     void setup() {
       gTargetPalette = gGradientPalettes[random16(gGradientPaletteCount)];
     }
-    void update(DrawingContext &ctx) {
+    void update() {
       CRGBArray<NUM_LEDS> leds = ctx.leds;
       EVERY_N_MILLISECONDS(20) {
         draw(leds);

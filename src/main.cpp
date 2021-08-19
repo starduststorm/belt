@@ -25,7 +25,7 @@
 #include "AudioManager.h"
 #include "controls.h"
 
-DrawingContext ctx(TOTAL_WIDTH, TOTAL_HEIGHT);
+DrawingContext ctx;
 
 /* ---------------------- */
 
@@ -57,7 +57,7 @@ void buttonSinglePress() {
 }
 
 void buttonDoublePress() {
-  logf("double press!");
+  patternManager.previousPattern();
 }
 
 void buttonLongPress() {

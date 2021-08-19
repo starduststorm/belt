@@ -31,6 +31,7 @@ class PatternManager {
       // testIdlePattern = new Bars());
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
+      // testIdlePattern = new MotionBlobs();
     }
     return testIdlePattern;
   }
@@ -39,25 +40,26 @@ public:
   BufferType &ctx;
 
   PatternManager(BufferType &ctx) : ctx(ctx) {
-    patternConstructors.push_back(&(construct<SmoothPalettes>));
-    patternConstructors.push_back(&(construct<PixelDust>));
+    patternConstructors.push_back(&(construct<MotionBlobs>));
     patternConstructors.push_back(&(construct<Bars>));
-    patternConstructors.push_back(&(construct<Oscillators>));
+    patternConstructors.push_back(&(construct<PixelDust>));
     patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
+    patternConstructors.push_back(&(construct<Oscillators>));
     patternConstructors.push_back(&(construct<Droplets>));
+    patternConstructors.push_back(&(construct<SmoothPalettes>));
     
     // patternConstructors.push_back(&(PatternManager::construct<Bits>));
-    // patternConstructors.push_back(&(PatternManager::construct<Motion>));
   }
 
   void nextPattern() {
-    if (activePattern) {
-      activePattern->stop();
-      delete activePattern;
-      activePattern = NULL;
-    }
-
     patternIndex = (patternIndex + 1) % patternConstructors.size();
+    if (!startPatternAtIndex(patternIndex)) {
+      nextPattern();
+    }
+  }
+
+  void previousPattern() {
+    patternIndex = mod_wrap(patternIndex - 1, patternConstructors.size());
     if (!startPatternAtIndex(patternIndex)) {
       nextPattern();
     }
@@ -76,8 +78,14 @@ public:
   }
 
   bool startPattern(Pattern *pattern) {
+    if (activePattern) {
+      activePattern->stop();
+      delete activePattern;
+      activePattern = NULL;
+    }
+
     if (pattern->wantsToRun()) {
-      pattern->start(ctx);
+      pattern->start();
       activePattern = pattern;
       return true;
     } else {
@@ -86,8 +94,12 @@ public:
   }
 
   void loop() {
+    ctx.leds.fill_solid(CRGB::Black);
+
     if (activePattern) {
-      activePattern->loop(ctx);
+      activePattern->loop();
+
+      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF);
     }
 
     // time out idle patterns

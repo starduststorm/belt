@@ -30,6 +30,7 @@ class PatternManager {
       // testIdlePattern = new Sound();
       // testIdlePattern = new Bars());
       // testIdlePattern = new Droplets();
+      // testIdlePattern = new PixelDust();
     }
     return testIdlePattern;
   }

@@ -675,21 +675,45 @@ public:
     motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
     float jerkFactor = 2.0;
 
-    // Z through board
+    // Z through board (right-side-up positive)
     // X vertical with text
     // Y horizontal along board
 
-    // TODO: May need to apply a small correction factor to Z to account for the board not sitting perfectly vertical on the belt/my back
+    // apply a small correction factor to Z to account for the board not sitting perfectly vertical on the belt/my back, pixels tend to get stuck towards the back
+
+    float zcorrect[2] = {0};
+
+    for (int p = 0; p < 2; ++p) {
+      int zbalance = 0;
+      for (unsigned n = 0; n < numParticles; ++n) {
+        dimension_t x,y;
+        pixelDust[0]->getPosition(n, &x, &y);
+        if (x > PANEL_WIDTH/2) {
+          zbalance++;
+        } else {
+          zbalance--;
+        }
+      }
+      zcorrect[p] = 2.0 * zbalance / numParticles;
+      // logf("zbalance %s = %i, zcorrect = %f", p==0?"right":"left", zbalance, zcorrect[p]);
+    }
+
+    // logf("ACCEL (%0.2f, %0.2f, %0.2f), LINACCEL (%0.2f, %0.2f, %0.2f)", accel.acceleration.x,accel.acceleration.y,accel.acceleration.z,
+    //                                                                     linear_accel.acceleration.x, linear_accel.acceleration.y, linear_accel.acceleration.z);
+
+    // board x impacted by motion z (through board) and motion y (horizontal along board). 
+    //   disinclude accel.y in favor of linear_accel.y  because we want to capture shifting and twirling, but wouldn't know what to do with wrapped panels if gravity is to the side
+    // board y impacted by motion x (vertical along board). add jerk factor in order to make pixels bounce
 
     pixelDust[0]->iterate(
-                 -1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z),
+                  -1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z + zcorrect[0] - jerkFactor * linear_accel.acceleration.y),
                   1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
-                  1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y));
+                  0);
     
     pixelDust[1]->iterate(
-                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z),
+                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z + zcorrect[1] - jerkFactor * linear_accel.acceleration.y),
                   1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
-                  1 * (accel.acceleration.y + jerkFactor * linear_accel.acceleration.y));
+                  0);
 
     leds.fill_solid(CRGB::Black);
 

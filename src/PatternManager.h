@@ -32,6 +32,7 @@ class PatternManager {
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
       // testIdlePattern = new MotionBlobs();
+      // testIdlePattern = new Compass();
     }
     return testIdlePattern;
   }
@@ -40,6 +41,7 @@ public:
   BufferType &ctx;
 
   PatternManager(BufferType &ctx) : ctx(ctx) {
+    patternConstructors.push_back(&(construct<Compass>));
     patternConstructors.push_back(&(construct<MotionBlobs>));
     patternConstructors.push_back(&(construct<Bars>));
     patternConstructors.push_back(&(construct<PixelDust>));

@@ -74,16 +74,16 @@ public:
     for (int x = 0; x < width; ++x) {
       for (int y = 0; y < height; ++y) {
         CRGB samples[4];
-        samples[0] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole, true)];
-        samples[1] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole, true)];
-        samples[2] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole - (int)ceilf(yshift_frac), true)];
-        samples[3] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole - (int)ceilf(yshift_frac), true)];
+        samples[0] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole, width, height, true)];
+        samples[1] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole, width, height, true)];
+        samples[2] = oldleds[ledxy(x - (int)xshift_whole, y - (int)yshift_whole - (int)ceilf(yshift_frac), width, height, true)];
+        samples[3] = oldleds[ledxy(x - (int)xshift_whole - (int)ceilf(xshift_frac), y - (int)yshift_whole - (int)ceilf(yshift_frac), width, height, true)];
 
         CRGB ref1 = blend(samples[0], samples[1], xshift_frac8);
         CRGB ref2 = blend(samples[2], samples[3], xshift_frac8);
         CRGB newpx = blend(ref1, ref2, yshift_frac8);
 
-        leds[ledxy(x,y)] = newpx;
+        leds[ledxy(x,y, width, height)] = newpx;
       }
     }
   }
@@ -109,6 +109,10 @@ public:
     drawStyle = styleStack.top();
     styleStack.pop();
   }
+
+  CRGB &ledat(int x, int y) {
+    return leds[ledxy(x,y,width,height)];
+  }
   
   void point(int x, int y, PixelType src, BlendMode blendMode) {
     if (drawStyle.wrap) {
@@ -123,7 +127,7 @@ public:
       assert(x >=0 && x < width, "point: x out of bounds");
       assert(y >=0 && y < height, "point: y out of bounds");
     }
-    int index = ledxy(x,y);
+    int index = ledxy(x, y, width, height);
     set_px(src, index, blendMode, 0xFF);
   }
 

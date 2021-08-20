@@ -6,7 +6,7 @@
 #endif
 // end FIXME
 
-#define DEBUG 1
+#define DEBUG 0
 #define WAIT_FOR_SERIAL 0
 
 #include <FastLED.h>

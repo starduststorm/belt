@@ -3,6 +3,7 @@
 
 #include <FastLED.h>
 #include <Audio.h>
+#include <map>
 
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
@@ -458,6 +459,145 @@ public:
 
   const char *description() {
     return "MotionBlobs";
+  }
+};
+
+/* ------------------------------------------------------------------------------------------------------ */
+
+const uint8_t fontHeight = 7;
+const char *fontN = ""
+"10001"
+"11001"
+"10101"
+"10011"
+"10001"
+"10001"
+"10001";
+
+const char *fontS = ""
+"01110"
+"10001"
+"10000"
+"01110"
+"00001"
+"10001"
+"01110";
+
+const char *fontE = ""
+"11111"
+"10000"
+"10000"
+"11110"
+"10000"
+"10000"
+"11111";
+
+const char *fontW = ""
+"1000001"
+"1000001"
+"1001001"
+"1001001"
+"1001001"
+"1010101"
+"0100010";
+
+class Glyph {
+  CRGB *data=NULL;
+  uint8_t width=0;
+  uint8_t height=0;
+public:
+  Glyph(uint8_t width, uint8_t height, const char *datastr, std::map<char, CRGB> colormap) : width(width), height(height) {
+    data = new CRGB[width * height];
+    for (int i = 0; i < width * height; ++i) {
+      data[width * height - i - 1] = colormap[datastr[i]];
+    }
+  }
+  ~Glyph() {
+    delete [] data;
+  }
+  uint8_t getWidth() { return width; }
+  uint8_t getHeight() { return height; }
+  
+  template<unsigned WIDTH, unsigned HEIGHT, class PixelType, class PixelSetType>
+  void draw(CustomDrawingContext<WIDTH, HEIGHT, PixelType, PixelSetType> &ctx, int drawx, int drawy, BlendMode blendMode=blendSourceOver) {
+    if (data == NULL) return;
+    ctx.pushStyle();
+    ctx.drawStyle.wrap = true;
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x) {
+        ctx.point(x+drawx, y+drawy, data[y*width + x], blendMode);
+      }
+    }
+    ctx.popStyle();
+  }
+};
+
+class Compass : public Pattern, public PaletteRotation<CRGBPalette32> {
+  Glyph *cardinals[4];
+
+  static const int frontGap = 4;
+  static const int panelLength = 32; // yay about 1cm per pixel
+  static const int backGap = 26;
+  static const int circumference = frontGap + 2*panelLength + backGap;
+  const int panelStartX[2] = {2, frontGap/2 + panelLength + backGap}; // measuring from front center
+  
+  // we'll create a buffer the full size of the belt to draw 360º compass to, and then copy the parts that "overlap" onto the panels
+  CustomDrawingContext< circumference, TOTAL_HEIGHT, CRGB, CRGBArray<circumference * TOTAL_HEIGHT> > circleBuffer;
+
+public:
+  Compass() : PaletteRotation(minBrightness=10) {
+    std::map<char,CRGB> colormap;
+    colormap['0'] = CRGB::Black;
+    colormap['1'] = CRGB::White;
+
+    const char *letters[4] = {fontS, fontW, fontN, fontE};
+    for (unsigned i = 0; i < ARRAY_SIZE(letters); ++i) {
+      cardinals[i] = new Glyph(strlen(letters[i]) / fontHeight, fontHeight, letters[i], colormap);
+    }
+    motionManager.subscribe();
+  }
+  ~Compass() {
+    motionManager.unsubscribe();
+  }
+
+  void update() {
+    ctx.leds.fill_solid(CRGB::Black);
+    circleBuffer.leds.fill_solid(CRGB::Black);
+
+    sensors_event_t event;
+    motionManager.getEvent(&event);
+    float xOffset = (event.magnetic.x + 90) * circleBuffer.width / 360;
+    // motionManager.printStatus();
+
+    uint8_t systemCalibration = 0;
+    motionManager.bno.getCalibration(&systemCalibration, NULL, NULL, NULL);
+    if (systemCalibration == 0) {
+      int dotSpacing = 8;
+      for (int i = 0; i < ctx.width / dotSpacing; ++i) {
+        ctx.point(mod_wrap(i*dotSpacing + event.orientation.x, ctx.width), 3, CRGB::White);
+      }
+    } else {
+      for (unsigned i = 0; i < ARRAY_SIZE(cardinals); ++i) {
+        int x = i * circleBuffer.width / ARRAY_SIZE(cardinals);
+        int y = 0;
+        cardinals[i]->draw(circleBuffer, x - cardinals[i]->getWidth()/2.0, y);
+      }
+      
+      circleBuffer.shift_buffer(-xOffset,0);
+
+      // now copy the larger buffer onto the panels
+      for (int p = 0; p < PANEL_COUNT; ++p) {
+        for (int y = 0; y < PANEL_HEIGHT; ++y) {
+          for (int x = 0; x < PANEL_WIDTH; ++x) {
+            ctx.ledat(x + p * PANEL_WIDTH,y) = circleBuffer.ledat(x + panelStartX[p], y);
+          }
+        }
+      }
+    }
+  }
+
+  const char *description() {
+    return "Compass";
   }
 };
 

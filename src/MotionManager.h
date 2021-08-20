@@ -11,7 +11,7 @@ public:
   MotionManager() {
     bno = Adafruit_BNO055(55, 0x28);
     
-    bool hasBNO = bno.begin();
+    bool hasBNO = bno.begin(bno.OPERATION_MODE_NDOF);
     logf("Has BNO senror: %s", (hasBNO ? "yes" : "no"));
     bno.setExtCrystalUse(true);
   }
@@ -69,7 +69,7 @@ public:
     uint8_t system, gyro, accel, mag;
     system = gyro = accel = mag = 0;
     bno.getCalibration(&system, &gyro, &accel, &mag);
-    logf("calibration level: %i", system);
+    logf("calibration level: sys: %i, gyro: %i, accel: %i, mag: %i", system, gyro, accel, mag);
 
     logf("Manager usage count: %u", retainCount);
     int8_t boardTemp = bno.getTemp();

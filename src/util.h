@@ -82,24 +82,24 @@ inline float fmod_wrap(float x, int m) {
   return result < 0 ? result + m : result;
 }
 
-inline unsigned int ledxy(int x, int y, bool wrap=false) {
-  if (wrap) x = mod_wrap(x, TOTAL_WIDTH);
-  if (wrap) y = mod_wrap(y, TOTAL_HEIGHT);
+inline unsigned int ledxy(int x, int y, int width=TOTAL_WIDTH, int height=TOTAL_HEIGHT, bool wrap=false) {
+  if (wrap) x = mod_wrap(x, width);
+  if (wrap) y = mod_wrap(y, height);
   // support zigzag
 #if DEBUG
-  if (x < 0 || x >= PANEL_WIDTH * PANEL_COUNT) {
+  if (x < 0 || x >= width) {
     logf("ledxy: OUT OF BOUNDS AT %i,%i", x,y);
     while(1) delay(100);
-  } else if (y < 0 || y >= PANEL_HEIGHT) {
+  } else if (y < 0 || y >= height) {
     logf("ledxy: OUT OF BOUNDS AT %i,%i", x,y);
     while(1) delay(100);
   }
 #endif
   unsigned int index = 0;
   if (x & 1) {
-    index = (x + 1) * PANEL_HEIGHT - 1 - y;
+    index = (x + 1) * height - 1 - y;
   } else {
-    index= x * PANEL_HEIGHT + y;
+    index= x * height + y;
   }
   return index;
 }

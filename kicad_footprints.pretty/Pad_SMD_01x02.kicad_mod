@@ -1,0 +1,10 @@
+(module Pad_SMD:Pad_SMD_01x02 (layer F.Cu) (tedit 5E31F1E4)
+  (fp_text reference PANEL_PWR2 (at -0.0762 0.127 -180) (layer F.SilkS) hide
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (fp_text value Conn_01x02 (at 6.985 0) (layer F.Fab)
+    (effects (font (size 1 1) (thickness 0.15)))
+  )
+  (pad 2 smd oval (at 1.27 0) (size 1.524 2.999999) (layers F.Cu F.Paste F.Mask))
+  (pad 1 smd oval (at -1.27 0) (size 1.524 2.999999) (layers F.Cu F.Paste F.Mask))
+)

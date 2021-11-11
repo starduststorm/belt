@@ -74,10 +74,10 @@ module diffscale() {
      }
 }
 
-module spiral(radius, thickness, loops, height) {
+module spiral(radius, width, loops, height) {
     linear_extrude(height=height) polygon(points= concat(
         [for(t = [90:360*loops]) 
-            [(radius-thickness+t/90)*sin(t),(radius-thickness+t/90)*cos(t)]],
+            [(radius-width+t/90)*sin(t),(radius-width+t/90)*cos(t)]],
         [for(t = [360*loops:-1:90]) 
             [(radius+t/90)*sin(t),(radius+t/90)*cos(t)]]
             ));
@@ -199,8 +199,12 @@ translate([board_x_size*-1.1, 0, 0]) union() {
         translate([0,0,button_column_height/2]) cylinder(h=button_column_height, r=button_column_radius, center=true);
         if (button_column_extra_height) 
             cylinder(h=2*button_column_extra_height, r1=button_column_radius + button_column_extra_height/2, r2=0, center=true);
-        translate([-0.1,0.4,0]) spiral(1, 1.2, 1, 0.4);
-        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.2, 0.96, 0.4);
+        
+        spiral_radius = 1;
+        spiral_thickness = 0.6;
+        spiral_width = 1.4;
+        translate([-0.1,0.4,0]) spiral(spiral_radius, spiral_width, 1, spiral_thickness);
+        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(spiral_radius, spiral_width, 1, spiral_thickness);
     }
 }
 

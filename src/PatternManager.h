@@ -31,7 +31,7 @@ class PatternManager {
       // testIdlePattern = new Bars());
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
-      // testIdlePattern = new MotionBlobs();
+      // testIdlePattern = new SpikeSpin();
       // testIdlePattern = new Compass();
     }
     return testIdlePattern;
@@ -42,12 +42,13 @@ public:
 
   PatternManager(BufferType &ctx) : ctx(ctx) {
     patternConstructors.push_back(&(construct<Compass>));
-    patternConstructors.push_back(&(construct<MotionBlobs>));
     patternConstructors.push_back(&(construct<Bars>));
+    patternConstructors.push_back(&(construct<SpikeSpin>));
+    patternConstructors.push_back(&(construct<ArrowSpin>));
     patternConstructors.push_back(&(construct<PixelDust>));
-    patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
-    patternConstructors.push_back(&(construct<Oscillators>));
     patternConstructors.push_back(&(construct<Droplets>));
+    patternConstructors.push_back(&(construct<Oscillators>));
+    patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
     patternConstructors.push_back(&(construct<SmoothPalettes>));
     
     // patternConstructors.push_back(&(PatternManager::construct<Bits>));

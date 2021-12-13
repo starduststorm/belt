@@ -34,6 +34,7 @@ public:
     logf("Starting %s", description());
     startTime = millis();
     stopTime = -1;
+    ctx.leds.fill_solid(CRGB::Black);
     setup();
   }
 
@@ -267,6 +268,7 @@ private:
   bool upsideDown = false;
 public:
   SpectrumAnalyzer() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBinCount) {
+    motionManager.subscribe();
   }
 
   ~SpectrumAnalyzer() {
@@ -275,8 +277,6 @@ public:
   
   void setup() {
     upsideDown = (random8(2) == 0);
-
-    motionManager.subscribe();
   }
   
   void update() {
@@ -328,42 +328,43 @@ public:
 /* ------------------------------------------------------------------------------------------------------ */
 
 class MotionBlobs : public Pattern, public PaletteRotation<CRGBPalette256>  {
-  float kMotionThreshold = 2.0; // FIXME: not used, replace with opt-in feature that pattern manager can use?
+  static const bool kTestMode = false;
+public:
+  typedef enum { rect22, arrow, spikes } Shape;
 private:
+  /*--MotionBlob--*/
   class MotionBlob {
+  public:
+    MotionBlobs *paletteRotation;
     
-    public:
-    enum Shape { rect22, arrow } shape;
     int y;
     int x;
-    CRGB color;
+    Shape shape;
 
-    void reset(int x, int y, CRGB color, Shape shape) {
+    void reset(MotionBlobs *paletteRotation, int x, int y, Shape shape) {
+      this->paletteRotation = paletteRotation;
       this->x = x;
       this->y = y;
-      this->color = color;
       this->shape = shape;
     }
-    
+      
     void update(DrawingContext ctx, float theta, float dtheta) {
       ctx.pushStyle();
       ctx.drawStyle.wrap = true;
-      // TODO: mod where this compensates for the total angle the leds will occupy in the circle
-      float px = x + theta * TOTAL_WIDTH / 360;
-      
-      int brightness = 0xFF;//min(0xFF, 100 * (dtheta - 1));
-      CRGB dimmedColor = color;
-      dimmedColor.nscale8_video(brightness);
 
       switch (shape) {
         case rect22: {
-          ctx.point(px,  y,   dimmedColor);
-          ctx.point(px+1, y,   dimmedColor);
-          ctx.point(px,  y+1, dimmedColor);
-          ctx.point(px+1, y+1, dimmedColor);
+          float px = x + theta * TOTAL_WIDTH / 360;
+          CRGB color = paletteRotation->getPaletteColor(beatsin8(3));
+          ctx.point(px,  y,   color);
+          ctx.point(px+1, y,   color);
+          ctx.point(px,  y+1, color);
+          ctx.point(px+1, y+1, color);
           break;
         }
         case arrow: {
+          float px = x + theta * TOTAL_WIDTH / 360;
+          CRGB color = paletteRotation->getPaletteColor(beatsin8(3));
           float bend = min(1.0, max(-1.0, 2*dtheta));
 
           for (int y = 0; y < ctx.height; ++y) {
@@ -376,29 +377,72 @@ private:
 
             float iptr;
             float frac = modff(arrowstart, &iptr);
-            CRGB c1 = dimmedColor;
-            CRGB c2 = dimmedColor;
+            CRGB c1 = color;
+            CRGB c2 = color;
             c1.nscale8_video(max(1, (1 - frac) * 0xFF));
             c2.nscale8_video(max(1, (frac * 0xFF)));
             ctx.point((int)iptr, (int)y, c1, blendBrighten);
             ctx.point((int)ceilf(arrowstart), (int)y, c2, blendBrighten);
-
           }
+          break;
+        }
+        case spikes: {
+          // WIP
+          // vertical bar while still, morphs in 2D to a horizontal bar, passing through larger shapes matched to rotation velocity
+          // while horizontal, forms a complete 2px thick line over entire belt that tracks 2 cycles of a palettes
+          
+          // 4 line segments, drawing a diamond of w,h
+          // 2 line segments, drawing a cross of w,h
+          // tune weights for how these parameters are matched to rotation velocity
+          // track vertical motion too?
+
+          float px = x + -2*theta * TOTAL_WIDTH / 360;
+          float bend = min(ctx.height/2-1, max(0.01, abs(2*-dtheta)));          
+          
+          CRGB color1, color2;
+          if (paletteRotation->colorMode == palette) {
+            color1 = paletteRotation->getPaletteColor(triwave8(0xFF * (x+bend+1)/PANEL_WIDTH)); // FIXME: needs to used mirrored palette
+            color2 = paletteRotation->getPaletteColor(triwave8(0xFF * (x-bend-1)/PANEL_WIDTH));
+          } else {
+            color1 = CHSV(0xFF * (x+bend+1)/PANEL_WIDTH, 0xFF, 0xFF);
+            color2 = CHSV(0xFF * (x-bend-1)/PANEL_WIDTH, 0xFF, 0xFF);
+          }
+
+          // diamond
+          ctx.line(px, bend, px+bend, ctx.height/2-1, color1, color2);
+          ctx.line(px, bend, px-bend, (int)ctx.height/2-1, color1, color2);
+          ctx.line(px, ctx.height-(int)bend-1, px+bend, ctx.height/2, color1, color2);
+          ctx.line(px, ctx.height-(int)bend-1, px-bend, ctx.height/2, color1, color2);
+
+          // cross
+          // FIXME: better fadeups e.g. proper antialiasing
+          ctx.line(px, bend, px, ctx.height-floorf(bend) - 1, color1.lerp8(color2, 0x7f), true);
+          ctx.line(px-bend-1, ctx.height/2 - 1, px+bend+1, ctx.height/2 - 1, color1, color2);
+          ctx.line(px-bend-1, ctx.height/2, px+bend+1, ctx.height/2, color1, color2);
           break;
         }
       }
       ctx.popStyle();
     }
   };
+  /*--End of MotionBlob--*/
   
 public:
   const int kBlobCount = 8;
   const int kBlobsResetTimeout = 5000;
   MotionBlob *blobs = NULL;
   long lastDisplay = -kBlobsResetTimeout;
+  
+  typedef enum { palette, rainbow } ColorMode;
+  ColorMode colorMode;
 
-  MotionBlobs() : PaletteRotation(minBrightness=10) {
+  Shape mode;
+
+  MotionBlobs(Shape mode) : PaletteRotation(minBrightness=10) {
+    this->mode = mode;
     blobs = new MotionBlob[kBlobCount];
+    colorMode = random8(2) ? palette : rainbow;
+    motionManager.subscribe();
   }
 
   ~MotionBlobs() {
@@ -421,16 +465,12 @@ public:
       int x = xbucketStart;// + random8(xbucketSize);
       int y = 0;//ybucketStart + random8(ybucketSize - 1);
       
-      blobs[i].reset(x, y, getPaletteColor(random8()), MotionBlob::arrow);
+      blobs[i].reset(this, x, y, mode);
     }
-  }
-  
-  void setup() {
-    motionManager.subscribe();
   }
 
   void update() {
-    ctx.leds.fadeToBlackBy(50);
+    ctx.leds.fadeToBlackBy(kTestMode ? 0xFF : 60);
 
     if (lastDisplay != -1 && millis() - lastDisplay > 5000) {
       resetBlobs();
@@ -439,26 +479,39 @@ public:
 
     float orientation;
     float twirlVelocity = motionManager.twirlVelocity(10, &orientation);
-
-    if (true || fabsf(twirlVelocity) > kMotionThreshold) {
-      ctx.pushStyle();
-      ctx.blendMode(blendBrighten);
-      for (int i = 0; i < kBlobCount; ++i) {
-        MotionBlob *blob = &blobs[i];
-        blob->color = getPaletteColor(beatsin8(3));
-        blob->update(ctx, orientation, twirlVelocity);
-      }
-      ctx.popStyle();
-      lastDisplay = millis();
+    if (kTestMode) {
+      twirlVelocity = beatsin8(40, 0, 0xFF)/63. - 2;
+      orientation = beatsin8(40, 0, 0xFF, 0, 195)/4 - 32;
     }
+    
+    ctx.pushStyle();
+    ctx.blendMode(blendBrighten);
+    for (int i = 0; i < kBlobCount; ++i) {
+      MotionBlob *blob = &blobs[i];
+      blob->update(ctx, orientation, twirlVelocity);
+    }
+    ctx.popStyle();
+    lastDisplay = millis();
   }
   
   bool wantsToIdleStop() {
     return true;
   }
+};
 
+class ArrowSpin : public MotionBlobs {
+public:
+  ArrowSpin() : MotionBlobs(MotionBlobs::arrow) {};
   const char *description() {
-    return "MotionBlobs";
+    return "ArrowSpin";
+  }
+};
+
+class SpikeSpin : public MotionBlobs {
+public:
+  SpikeSpin() : MotionBlobs(MotionBlobs::spikes) {};
+  const char *description() {
+    return "SpikeSpin";
   }
 };
 
@@ -611,6 +664,10 @@ class Bars : public Pattern, public PaletteRotation<CRGBPalette16> {
   float *xvelocities = NULL;
   float *xoffsets = NULL;
 public:  
+  Bars() {
+    motionManager.subscribe();
+  }
+  
   ~Bars() {
     delete [] xvelocities;
     delete [] xoffsets;
@@ -630,8 +687,6 @@ public:
       xvelocities[i] = random8() / (255.0 * 2) + 0.75;
       xoffsets[i] = random8(8);
     }
-
-    motionManager.subscribe();
   }
   
   void update() {
@@ -822,14 +877,11 @@ public:
     }
 
     prepareTrackedColors(numParticles);
+    motionManager.subscribe();
   }
 
   ~PixelDust() {
     motionManager.unsubscribe();
-  }
-
-  void setup() {
-    motionManager.subscribe();
   }
 
   void update() {

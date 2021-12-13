@@ -26,7 +26,7 @@ public:
    */
 
   void subscribe() {
-    logf("+MotionManager");
+    // logf("+MotionManager");
     retainCount++;
     if (retainCount == 1) {
       logf("Powering up BNO...");
@@ -36,7 +36,7 @@ public:
   }
   
   void unsubscribe() {
-    logf("-MotionManager");
+    // logf("-MotionManager");
     assert(retainCount != 0, "Not subscribed");
     retainCount--;
     if (retainCount == 0) {

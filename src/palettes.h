@@ -699,6 +699,7 @@ public:
   }
   
   void paletteRotationTick() {
+    // FIXME: global state
     EVERY_N_MILLISECONDS(40) {
       nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
     }

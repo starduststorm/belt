@@ -135,13 +135,14 @@ public:
     point(x, y, src, drawStyle.blendMode);
   }
   
-  void line(float x1, float y1, float x2, float y2, PixelType src, bool antialias=false) {
+  void line(float x1, float y1, float x2, float y2, PixelType src1, PixelType src2, bool antialias=false) {
     // TODO: fix antialiasing for diagonal lines
+    
     bool useY = (x1 == x2 || fabsf((y2 - y1) / (float)(x2 - x1)) > 1);
     if (useY) {
       if (y1 == y2) {
         // this is just a point
-        point(x1, y1, src);
+        point(x1, y1, src1);
         return;
       }
       if (y1 > y2) {
@@ -149,8 +150,8 @@ public:
         std::swap(x1, x2);
       }
       for (float y = y1; y <= y2; ++y) {
-        // TODO: can I do this without the float divisions?
         float x = x1 + (y - y1) / (float)(y2 - y1) * (x2 - x1);
+        PixelType src = src2.lerp8(src1, 0xFF * (uint8_t)(y-y1) / (uint8_t)(y2-y1));
         if (antialias) {
           float iptr;
           float frac = fabsf(modff(y, &iptr));
@@ -176,6 +177,7 @@ public:
       }
       for (float x = x1; x <= x2 + 0.0001; ++x) {
         float y = y1 + (x - x1) / (float)(x2 - x1) * (y2 - y1);
+        PixelType src = src2.lerp8(src1, 0xFF * (uint8_t)(x-x1) / (uint8_t)(x2-x1));
         if (antialias) {
           float iptr;
           float frac = fabsf(modff(x, &iptr));
@@ -195,6 +197,10 @@ public:
         }
       }
     }
+  }
+
+  void line(float x1, float y1, float x2, float y2, PixelType src, bool antialias=false) {
+    line(x1, y1, x2, y2, src, src, antialias);
   }
 
   void circle(float centerX, float centerY, float radius, int ndiv, bool fill, PixelType src) {

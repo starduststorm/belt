@@ -641,7 +641,8 @@ PaletteManager<CRGBPalette16> paletteManager;
 
 /* -------------------------------------------------------------------- */
 
-void nblendPaletteTowardPalette(CRGBPalette256& current, CRGBPalette256& target, uint16_t maxChanges)
+template<typename PaletteType>
+void nblendPaletteTowardPalette(PaletteType& current, PaletteType& target, uint16_t maxChanges)
 {
   uint8_t* p1;
   uint8_t* p2;
@@ -650,7 +651,7 @@ void nblendPaletteTowardPalette(CRGBPalette256& current, CRGBPalette256& target,
   p1 = (uint8_t*)current.entries;
   p2 = (uint8_t*)target.entries;
 
-  const uint16_t totalChannels = sizeof(CRGBPalette256);
+  const uint16_t totalChannels = sizeof(PaletteType);
   for( uint16_t i = 0; i < totalChannels; i++) {
     // if the values are equal, no changes are needed
     if( p1[i] == p2[i] ) { continue; }
@@ -670,16 +671,18 @@ void nblendPaletteTowardPalette(CRGBPalette256& current, CRGBPalette256& target,
   }
 }
 
-template <class T>
+template <typename PaletteType>
 class PaletteRotation {
 private:
-  PaletteManager<T> manager;
-  T currentPalette;
-  T targetPalette;
+  PaletteManager<PaletteType> manager;
+  PaletteType currentPalette;
+  PaletteType targetPalette;
+protected:
   uint8_t *colorIndexes = NULL;
+private:
   uint8_t colorIndexCount = 0;
 
-  void assignPalette(T* palettePr) {
+  void assignPalette(PaletteType* palettePr) {
     manager.getRandomPalette(palettePr, minBrightness, maxColorJump);
   }
 
@@ -687,6 +690,7 @@ public:
   int secondsPerPalette = 10;
   uint8_t minBrightness = 0;
   uint8_t maxColorJump = 0xFF;
+  bool pauseRotation = false;
   
   PaletteRotation(int minBrightness=0) {
     this->minBrightness = minBrightness;
@@ -694,39 +698,52 @@ public:
     assignPalette(&targetPalette);
   }
 
-  ~PaletteRotation() {
+  virtual ~PaletteRotation() {
     delete [] colorIndexes;
   }
   
   void paletteRotationTick() {
-    // FIXME: global state
-    EVERY_N_MILLISECONDS(40) {
-      nblendPaletteTowardPalette(currentPalette, targetPalette, sizeof(T) / 3);
-    }
-    EVERY_N_SECONDS(secondsPerPalette) {
-      assignPalette(&targetPalette);
+    if (!pauseRotation) {
+      EVERY_N_MILLISECONDS(40) {
+        nblendPaletteTowardPalette<PaletteType>(currentPalette, targetPalette, sizeof(PaletteType) / 3);
+      }
+      EVERY_N_SECONDS(secondsPerPalette) {
+        assignPalette(&targetPalette);
+      }
     }
   }
 
-  T getPalette() {
+  PaletteType& getPalette() {
     paletteRotationTick();
     return currentPalette;
   }
 
-  CRGB getPaletteColor(uint8_t n) {
-    return ColorFromPalette(getPalette(), n);
+  // unblended override
+  virtual void setPalette(PaletteType palette) {
+    currentPalette = palette;
   }
 
-  CRGB getTrackedColor(uint8_t n) {
-    assert(n < colorIndexCount, "getTrackedColor: n must be less than tracked color count");
+  void randomizePalette() {
+    assignPalette(&currentPalette);
+  }
+
+  CRGB getPaletteColor(uint8_t n, uint8_t brightness = 0xFF) {
+    return ColorFromPalette(getPalette(), n, brightness);
+  }
+
+  CRGB getTrackedColor(uint8_t n, uint8_t *colorIndex=NULL) {
+    assert(n < colorIndexCount, "getTrackedColor: index (%u) must be less than tracked color count (%u)", n, colorIndexCount);
     if (n >= colorIndexCount) {
       return CRGB::Black;
     }
-    T palette = getPalette();
+    PaletteType& palette = getPalette();
     CRGB color = ColorFromPalette(palette, colorIndexes[n]);
     while (linearBrightness(color) < minBrightness) {
       colorIndexes[n] = addmod8(colorIndexes[n], 1, 0xFF);
       color = ColorFromPalette(palette, colorIndexes[n]);
+    }
+    if (colorIndex) {
+      *colorIndex = colorIndexes[n];
     }
     return color;
   }
@@ -737,14 +754,14 @@ public:
     }
   }
 
-  void prepareTrackedColors(uint8_t count) {
+  void prepareTrackedColors(uint8_t count, int paletteCyles=1) {
     if (colorIndexes) {
       delete [] colorIndexes;
     }
     colorIndexCount = count;
     colorIndexes = new uint8_t[colorIndexCount];
     for (unsigned i = 0; i < colorIndexCount; ++i) {
-      colorIndexes[i] = random8();
+      colorIndexes[i] = paletteCyles * 0xFF * i / colorIndexCount;
     }
   }
 
@@ -754,5 +771,9 @@ public:
       colorIndexes = NULL;
       colorIndexCount = 0;
     }
+  }
+
+  uint8_t trackedColorsCount() {
+    return colorIndexCount;
   }
 };

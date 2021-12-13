@@ -347,7 +347,7 @@ private:
       this->y = y;
       this->shape = shape;
     }
-      
+    
     void update(DrawingContext ctx, float theta, float dtheta) {
       ctx.pushStyle();
       ctx.drawStyle.wrap = true;
@@ -364,8 +364,7 @@ private:
         }
         case arrow: {
           float px = x + theta * TOTAL_WIDTH / 360;
-          CRGB color = paletteRotation->getPaletteColor(beatsin8(3));
-          float bend = min(1.0, max(-1.0, 2*dtheta));
+          float bend = 1.5*dtheta;
 
           for (int y = 0; y < ctx.height; ++y) {
             if (y < ctx.height/2) {
@@ -375,19 +374,34 @@ private:
             }
             float arrowstart = px - 2 * bend;
 
-            float iptr;
-            float frac = modff(arrowstart, &iptr);
+            float yCenterDistanceFactor = (fabsf(ctx.height/2 - 0.5 - y) - 0.5) / (ctx.height/2 - 1);
+            
+            uint8_t paletteIndexTimeShift = beatsin16(1, 0, 2*0xFF);
+            uint8_t paletteIndexCircularShift = 0xFF * x / (float)TOTAL_WIDTH;
+            uint8_t paletteIndex = triwave8((uint8_t)(0x7F * yCenterDistanceFactor) + paletteIndexTimeShift + paletteIndexCircularShift);
+            CRGB color = paletteRotation->getPaletteColor(paletteIndex);
             CRGB c1 = color;
             CRGB c2 = color;
-            c1.nscale8_video(max(1, (1 - frac) * 0xFF));
-            c2.nscale8_video(max(1, (frac * 0xFF)));
-            ctx.point((int)iptr, (int)y, c1, blendBrighten);
+
+            //  draw a second faded arrow
+            float iptr;
+            float frac = modff(arrowstart, &iptr);
+            c1 = c1.nscale8_video(max(1, (1 - frac) * 0xFF));
+            c2 = c2.nscale8_video(max(1, (frac * 0xFF)));
+            
+            // dim slightly at the top and bottom
+            float dimmingFactor = 0.5;
+            float heightDimmingAlpha = dimmingFactor * yCenterDistanceFactor;
+
+            c1 = c1.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
+            c2 = c2.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
+
+            ctx.point((int)iptr, (int)y, c1, blendBrighten); 
             ctx.point((int)ceilf(arrowstart), (int)y, c2, blendBrighten);
           }
           break;
         }
         case spikes: {
-          // WIP
           // vertical bar while still, morphs in 2D to a horizontal bar, passing through larger shapes matched to rotation velocity
           // while horizontal, forms a complete 2px thick line over entire belt that tracks 2 cycles of a palettes
           
@@ -443,6 +457,7 @@ public:
     blobs = new MotionBlob[kBlobCount];
     colorMode = random8(2) ? palette : rainbow;
     motionManager.subscribe();
+    this->minBrightness = 5;
   }
 
   ~MotionBlobs() {
@@ -470,7 +485,7 @@ public:
   }
 
   void update() {
-    ctx.leds.fadeToBlackBy(kTestMode ? 0xFF : 60);
+    ctx.leds.fadeToBlackBy(kTestMode ? 60 : 60);
 
     if (lastDisplay != -1 && millis() - lastDisplay > 5000) {
       resetBlobs();
@@ -480,10 +495,9 @@ public:
     float orientation;
     float twirlVelocity = motionManager.twirlVelocity(10, &orientation);
     if (kTestMode) {
-      twirlVelocity = beatsin8(40, 0, 0xFF)/63. - 2;
-      orientation = beatsin8(40, 0, 0xFF, 0, 195)/4 - 32;
+      twirlVelocity = beatsin8(20, 0, 0xFF)/63. - 2;
+      orientation = beatsin8(20, 0, 0xFF, 0, 195) - 127;
     }
-    
     ctx.pushStyle();
     ctx.blendMode(blendBrighten);
     for (int i = 0; i < kBlobCount; ++i) {

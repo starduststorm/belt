@@ -32,6 +32,7 @@ class PatternManager {
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
       // testIdlePattern = new SpikeSpin();
+      // testIdlePattern = new ArrowSpin();
       // testIdlePattern = new Compass();
     }
     return testIdlePattern;

@@ -178,13 +178,12 @@ public:
     for (int x = 0; x < fftNumBins; ++x) {
       float level = levels[x];
       if (level >= 0.01) {
-        Serial.print(level);
-        Serial.print(" ");
+        loglf("%0.2f ", level);
       } else {
         Serial.print("  -  "); // don't print "0.00"
       }
-      Serial.println();
     }
+    Serial.println();
   }
 
   void fftLogRaw() {

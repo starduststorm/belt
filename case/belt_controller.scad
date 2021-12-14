@@ -74,10 +74,10 @@ module diffscale() {
      }
 }
 
-module spiral(radius, width, loops, height) {
+module spiral(radius, thickness, loops, height) {
     linear_extrude(height=height) polygon(points= concat(
         [for(t = [90:360*loops]) 
-            [(radius-width+t/90)*sin(t),(radius-width+t/90)*cos(t)]],
+            [(radius-thickness+t/90)*sin(t),(radius-thickness+t/90)*cos(t)]],
         [for(t = [360*loops:-1:90]) 
             [(radius+t/90)*sin(t),(radius+t/90)*cos(t)]]
             ));
@@ -105,19 +105,19 @@ power_usb_y_range = [85.8, 126.7] /*pcb*/- [start_position.y, start_position.y];
 power_usb_height = 3.5 /*measured*/ - board_thickness + 0.4 /*tolerance*/;
 
 power_switch_cutout_position = [121.3, 75.4, 0] /*pcb*/ - start_position;
-power_switch_cutout_size = [3.85, 7.2, shell_thickness] /*measured*/ + [0.2, 0.2, 0.2] /*tolerance*/;
+power_switch_cutout_size = [3.85, 7.2, shell_thickness] /*measured*/ + [0.2, 0.6, 0.2] /*tolerance*/;
 
-teensy_usb_size = [7.9, shell_thickness+epsilon, 2.9];
-teensy_usb_position = [134.6 /*pcb*/, start_position.y-shell_thickness, 5.1-teensy_usb_size.z /*measured*/] - start_position;
+teensy_usb_size = [7.9, shell_thickness+epsilon, 3.4];
+teensy_usb_position = [134.6 /*pcb*/, start_position.y-shell_thickness, 5.4-teensy_usb_size.z] - start_position;
 
 dial_1_position = [149.225 + 10.16, 83.185, 0] /*pcb*/ - start_position;
 dial_2_position = [149.225 + 10.16, 98.298, 0] /*pcb*/ - start_position;
-dial_radius = 7.2 /*measured*/ + 0.5 /*tolerance*/;
+dial_radius = 7.2 /*measured*/ + 0.4 /*tolerance*/;
 
 wire_cutout_position_y = 132.75 /*pcb*/ - start_position.y;
 wire_cutout_radius = 2.75 /*pcb*/ + 0.4 /*extra for messy cables*/;
 
-button_column_radius = 2;
+button_column_radius = 2.2;
 button_column_height = top_case_height - (6.0 /*measured*/ - board_thickness);
 button_column_extra_height = 3; // I'm printing the top case upside down so this is fine, just need to flip it in the slicer
 button_position = [153.3, 72.4, 0] /*pcb*/ - start_position;
@@ -173,11 +173,10 @@ translate([board_x_size*-1.1, 0, 0]) union() {
             // lettering
             fonts = [   "santa fe let",
                         "blackmoor let",
-                        "snell roundhand",
-                        "brushscipt mt",
+                        "Apple Chancery",
                         "synchro let",
+                        "herculanum",
                         "jazz let",
-                        
                     ];
             translate([board_x_size/3-3, board_y_size/4+2, 0.2]) rotate(PI*RAD, [0,1,0]) {
                 for (i = [0:len(fonts)-1]) {
@@ -198,13 +197,9 @@ translate([board_x_size*-1.1, 0, 0]) union() {
     translate(button_position) {
         translate([0,0,button_column_height/2]) cylinder(h=button_column_height, r=button_column_radius, center=true);
         if (button_column_extra_height) 
-            cylinder(h=2*button_column_extra_height, r1=button_column_radius + button_column_extra_height/2, r2=0, center=true);
-        
-        spiral_radius = 1;
-        spiral_thickness = 0.6;
-        spiral_width = 1.4;
-        translate([-0.1,0.4,0]) spiral(spiral_radius, spiral_width, 1, spiral_thickness);
-        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(spiral_radius, spiral_width, 1, spiral_thickness);
+            cylinder(h=2*button_column_extra_height, r1=button_column_radius + button_column_extra_height/4, r2=1.5, center=true);
+        translate([-0.1,0.4,0]) spiral(1, 1.2, 1, 0.4);
+        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.2, 0.96, 0.4);
     }
 }
 

@@ -1,19 +1,43 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
+#include <functional>
+#include <map>
+#include <vector>
 
+typedef enum : unsigned int {
+  JumpActivity,
+  ActivityTypeCount,
+} ActivityType;
+
+typedef std::function<void()> ActivityHandler;
+typedef std::map<const char *, ActivityHandler> ActivityHandlerMap;
 
 class MotionManager {
 private:
   unsigned int retainCount;
+  std::vector<ActivityHandlerMap> activityHandlers;
+  
 public:
   Adafruit_BNO055 bno;
   MotionManager() {
     bno = Adafruit_BNO055(55, 0x28);
     
     bool hasBNO = bno.begin(bno.OPERATION_MODE_NDOF);
-    logf("Has BNO senror: %s", (hasBNO ? "yes" : "no"));
+    logf("Has BNO sensor: %s", (hasBNO ? "yes" : "no"));
     bno.setExtCrystalUse(true);
+
+    for (unsigned i = 0; i < ActivityTypeCount; ++i) {
+      activityHandlers.push_back(ActivityHandlerMap());
+    }
+  }
+
+  void addActivityHandler(ActivityType activity, const char *identifier, ActivityHandler handler) {
+    activityHandlers[activity][identifier] = handler;
+  }
+
+  void removeActivityHandler(ActivityType activity, const char *identifier) {
+    activityHandlers[activity].erase(identifier);
   }
 
   /* FIXME: once belt is constructed, save and restore calibration data:
@@ -44,9 +68,34 @@ public:
     }
   }
 
+  // the jankiest activity classifier evar
+  unsigned long jumpClock = 0;
+
   void getEvent(sensors_event_t *event) {
     bno.getEvent(event);
+    
+    sensors_event_t linear_accel;
+    sensors_event_t accel;
+    bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
+    // logf("accel, lin_accel: (%0.3f, %0.3f)", accel.acceleration.x, linear_accel.acceleration.x);
+
+    // FIXME: Run MotionManager all the time so it can run activity classifiers
+    // a "jump" is 15-20 frames btween linear_accel.acceleration.x > 10 and < -20
+    if (linear_accel.acceleration.x > 10) {
+      jumpClock = millis();
+    }
+    if (linear_accel.acceleration.x < -25 && millis() - jumpClock < 250) {
+      logf("Firing jump activity with jumpClock at %lu", millis() - jumpClock);
+      jumpClock = 0;
+      // for (handler : activityHandlers[JumpActivity].) {
+      for (const auto &item : activityHandlers[JumpActivity]) {
+        logf("Firing jump handler for identifier %s", item.first);
+        item.second();
+      }
+    }
   }
+
 private:
   float twirlVelocityAccum;
   float prevXOrientation;

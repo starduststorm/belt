@@ -748,25 +748,26 @@ public:
 class Oscillators : public Pattern, public PaletteRotation<CRGBPalette16>, public FFTProcessing {
   static const int fftBins = 5;
   float offset = 0;
-  bool usePalette;
+  uint8_t mode;
   float fftHistory[fftBins][PANEL_HEIGHT];
 public:
   Oscillators() : PaletteRotation(minBrightness=10), FFTProcessing(&audioManager, fftBins) {
     secondsPerPalette = 20;
+    mode = 0;
+    motionManager.subscribe();
+    motionManager.addActivityHandler(JumpActivity, "oscillators", [this]() {
+      this->mode = addmod8(this->mode, 1, 3);
+    });
   }
 
   ~Oscillators() {
+    motionManager.removeActivityHandler(JumpActivity, "oscillators");
     motionManager.unsubscribe();
   }
 
-  void setup() {
-    motionManager.subscribe();
-    usePalette = random8(2) == 0;
-  }
-
   void update() {
-    for (int index = 0; index < ctx.width * ctx.height; ++index) {
-      // this looks cool for a good long time
+//    for (int index = 0; index < ctx.width * ctx.height; ++index) {
+//      // this looks cool for a good long time
 //      int r = 0;//beatsin16(millis() / 15 + 5 * index) >> 8;
 //      int g = beatsin16(millis() / 10 + 10 * index) >> 8;
 //      int b = 0;//beatsin16(millis() / 5 + 15 * index) >> 8;
@@ -775,7 +776,7 @@ public:
 //      }
 //CRGB color = CRGB(dim8_raw(r), dim8_raw(g), dim8_raw(b));
 //      ctx.leds[index] = color;
-    }
+//    }
 
     // float offset = millis() / 2.;
     offset += motionManager.twirlVelocity(20);
@@ -797,10 +798,14 @@ public:
         float bucket = fmod_wrap((phase+64) / 255., fftBins);
         uint8_t colorIndex = 255./fftBins * (int)bucket;
         CRGB color;
-        if (usePalette) {
-          color = getPaletteColor(addmod8(colorIndex, 51, 0xFF));
-        } else {
-          color = CHSV(colorIndex, 0xFF, 0xFF);
+        switch (mode) {
+          case 1:
+            color = CHSV(colorIndex, 0xFF, 0xFF); break;
+          case 2:
+            color = ColorFromPalette((CRGBPalette32)Trans_Flag_gp, colorIndex + 0xFF/5); break;
+          case 0:
+          default:
+           color = getPaletteColor(addmod8(colorIndex, 51, 0xFF)); break;
         }
         
         color.nscale8_video(min(0xFF, scale8(dim8_video(sin8(phase)), fftHistory[(int)bucket % fftBins][y] * 1 * 0xFF)));

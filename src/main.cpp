@@ -75,7 +75,7 @@ void thumbdial1Change(int val) {
 }
 
 void thumbdial2Change(int val) {
-  float gain = 0.01 + val * 1.2 / 1023;
+  float gain = 0.01 + val * 1.4 / 1023;
   logf("set extra gain: %f", gain);
   audioManager.setExtraGain(gain);
 }

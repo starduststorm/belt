@@ -965,12 +965,6 @@ public:
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-// vary drop shape and size by varying parameters flow,eff,loss,interval etc. parameters randomly, or to data fed by sound or motion
-
-// this pattern, and others, can react to motion data or sound always, if it's detected, only when toggled, or never. 
-// if it can be detected, then I can run idle behavior when it's absent. 
-// if toggled, that would enable e.g. Bars pattern to follow my motion with a tiny bit of inertia so it spins as I walk around, even slowly, or can be toggled off to just run idle
-
 class Droplets : public Pattern, public PaletteRotation<CRGBPalette256>, public FFTProcessing {
 private:
   unsigned long lastDrop;
@@ -1108,7 +1102,7 @@ public:
     float litRatio = ledsLit / (float)NUM_LEDS;
     const float litUpperThresh = 0.85;
     if (litRatio > litUpperThresh) {
-      extraGain = max(0, extraGain - (litRatio - litUpperThresh) / 20);
+      extraGain = max(0, extraGain - (litRatio - litUpperThresh) / 80);
     }
     if (ledsLit < 0.15 * NUM_LEDS && extraGain < 2) {
       extraGain += 0.001 / (extraGain > 1 ? extraGain * extraGain : 1.0);

@@ -81,14 +81,40 @@ public:
     // logf("accel, lin_accel: (%0.3f, %0.3f)", accel.acceleration.x, linear_accel.acceleration.x);
 
     // FIXME: Run MotionManager all the time so it can run activity classifiers
-    // a "jump" is 15-20 frames btween linear_accel.acceleration.x > 10 and < -20
-    if (linear_accel.acceleration.x > 10) {
+    // a "jump" is a short interval between linear_accel.acceleration.x moving high and then low, indicating the liftoff and then land
+    const int kJumpClockMin = 80;
+    const int kJumpClockMax = 250;
+
+    // 
+    static float runningMin = 10000;
+    static float runningMax = -1;
+    static long minCapture = 0;
+    static long maxCapture = 0;
+
+    if (millis() - minCapture > kJumpClockMax) {
+      runningMin = 1000;
+      minCapture = 0;
+    }
+    if (millis() - maxCapture > kJumpClockMax) {
+      runningMax = -1;
+      maxCapture = 0;
+    }
+    if (linear_accel.acceleration.x < runningMin) {
+      runningMin = linear_accel.acceleration.x;
+      minCapture = millis();
+    }
+    if (linear_accel.acceleration.x > runningMax) {
+      runningMax = linear_accel.acceleration.x;
+      maxCapture = millis();
+    }
+    //
+
+    if (linear_accel.acceleration.x > 12) {
       jumpClock = millis();
     }
-    if (linear_accel.acceleration.x < -25 && millis() - jumpClock < 250) {
-      logf("Firing jump activity with jumpClock at %lu", millis() - jumpClock);
+    if (linear_accel.acceleration.x < -26 && millis() - jumpClock < kJumpClockMax && millis() - jumpClock > kJumpClockMin) {
+      logf("Firing jump activity with runningMin %f, runningMax %f, capture clock %li, jumpClock at %lu", runningMin, runningMax, minCapture-maxCapture, millis() - jumpClock);
       jumpClock = 0;
-      // for (handler : activityHandlers[JumpActivity].) {
       for (const auto &item : activityHandlers[JumpActivity]) {
         logf("Firing jump handler for identifier %s", item.first);
         item.second();

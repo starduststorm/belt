@@ -61,7 +61,7 @@ void buttonDoublePress() {
 }
 
 void buttonLongPress() {
-  logf("long press!");
+  patternManager.toggleAutoPattern();
 }
 
 void buttonDoubleLongPress() {
@@ -107,6 +107,7 @@ void setup() {
   FastLED.addLeds<PANEL_COUNT, WS2812B, DATA_PIN_1, GRB>(ctx.leds, PANEL_LEDS);
 
   patternManager.ctx = ctx;
+  patternManager.setup();
 
   fc.tick();
   SPSTButton *button = controls.addButton(BUTTON_PIN);

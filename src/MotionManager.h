@@ -4,6 +4,7 @@
 #include <functional>
 #include <map>
 #include <vector>
+#include "stats.h"
 
 typedef enum : unsigned int {
   JumpActivity,
@@ -17,10 +18,11 @@ class MotionManager {
 private:
   unsigned int retainCount;
   std::vector<ActivityHandlerMap> activityHandlers;
+  RunningStats accelerationStats;
   
 public:
   Adafruit_BNO055 bno;
-  MotionManager() {
+  MotionManager() : accelerationStats(450) {
     bno = Adafruit_BNO055(55, 0x28);
     
     bool hasBNO = bno.begin(bno.OPERATION_MODE_NDOF);
@@ -65,7 +67,19 @@ public:
     retainCount--;
     if (retainCount == 0) {
       bno.enterSuspendMode();
+      logf("Powered down BNO");
     }
+  }
+
+  void loop() {
+    sensors_event_t accel;
+    bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+
+    accelerationStats.push(accel.acceleration.x);
+  }
+  
+  float bouncyEnergy() {
+    return accelerationStats.variance();
   }
 
   // the jankiest activity classifier evar

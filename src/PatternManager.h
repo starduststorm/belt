@@ -9,12 +9,31 @@
 const bool kTestPatternTransitions = false;
 const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
 
+typedef std::function<void(DrawingContext ctx, float progress)> OverlayTick;
+struct Overlay {
+  unsigned long start;
+  unsigned long duration;
+  OverlayTick tick;
+}; 
+
 template <typename BufferType>
 class PatternManager {
   int patternIndex = -1;
   Pattern *activePattern = NULL;
 
   std::vector<Pattern * (*)(void)> patternConstructors;
+  
+  DrawingContext overlayCtx;
+  std::vector<Overlay> overlays;
+
+  bool automaticPatternSwitching = false;
+
+  // track the last known low-motion event for auto-switching
+  // TODO: make better, more general, use cross fades
+  unsigned long lastLowEnergy = 0;
+
+  int initialPatternIndex = 0;
+  int highMotionPatternIndex = 0;
 
   template<class T>
   static Pattern *construct() {
@@ -45,14 +64,28 @@ public:
     patternConstructors.push_back(&(construct<Compass>));
     patternConstructors.push_back(&(construct<Bars>));
     patternConstructors.push_back(&(construct<SpikeSpin>));
-    patternConstructors.push_back(&(construct<ArrowSpin>));
-    patternConstructors.push_back(&(construct<PixelDust>));
+    patternConstructors.push_back(&(construct<ArrowSpin>)); initialPatternIndex = patternConstructors.size()-1;
+    patternConstructors.push_back(&(construct<PixelDust>)); highMotionPatternIndex = patternConstructors.size()-1;
     patternConstructors.push_back(&(construct<Droplets>));
     patternConstructors.push_back(&(construct<Oscillators>));
     patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
     patternConstructors.push_back(&(construct<SmoothPalettes>));
     
     // patternConstructors.push_back(&(PatternManager::construct<Bits>));
+  }
+
+  void RunOverlay(unsigned long durationMillis, OverlayTick tick) {
+    Overlay overlay;
+    overlay.duration = durationMillis;
+    overlay.start = millis();
+    overlay.tick = tick;
+    overlays.push_back(overlay);
+  }
+
+  void setup() {
+    // always keep motion running
+    motionManager.subscribe();
+    startPatternAtIndex(initialPatternIndex);
   }
 
   void nextPattern() {
@@ -67,6 +100,18 @@ public:
     if (!startPatternAtIndex(patternIndex)) {
       nextPattern();
     }
+  }
+
+  void toggleAutoPattern() {
+    automaticPatternSwitching = !automaticPatternSwitching;
+    logf("Pattern Automatic -> %s", (automaticPatternSwitching ? "ON" : "OFF"));
+    
+    RunOverlay(500, [this](DrawingContext ctx, float progress) {
+      float x1 = automaticPatternSwitching ? progress * PANEL_WIDTH : PANEL_WIDTH - progress * PANEL_WIDTH;
+      float x2 = automaticPatternSwitching ? 2*PANEL_WIDTH - progress * PANEL_WIDTH : PANEL_WIDTH + progress * PANEL_WIDTH;
+      ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
+      ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
+    });
   }
 
   bool startPatternAtIndex(int index) {
@@ -100,11 +145,42 @@ public:
   void loop() {
     ctx.leds.fill_solid(CRGB::Black);
 
+    if (automaticPatternSwitching) {
+      // TODO: dial in all these values
+      const float kEnergyThresh = 60;
+      
+      motionManager.loop();
+      if (motionManager.bouncyEnergy() < kEnergyThresh) {
+        lastLowEnergy = millis();
+      }
+      // logf("motionManager.bouncyEnergy() = %f", motionManager.bouncyEnergy());
+      if (lastLowEnergy != 0 && millis() - lastLowEnergy > 5000) {
+        // 5 seconds of sustained motion
+        if (patternIndex != highMotionPatternIndex) {
+          logf("long sustained motion, switching to dust");
+          startPatternAtIndex(highMotionPatternIndex);
+          lastLowEnergy = 0;
+        }
+      }
+    }
+
     if (activePattern) {
       activePattern->loop();
-
       activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF);
     }
+
+    for (auto it = overlays.begin(); it != overlays.end(); ) {
+      Overlay overlay = *it;
+      if (overlay.start + overlay.duration < millis()) {
+        overlays.erase(it);
+      } else {
+        float progress = min(1.0, max(0.0, (millis() - overlay.start) / (float)overlay.duration));
+        overlay.tick(overlayCtx, progress);
+        ++it;
+      }
+    }
+    overlayCtx.blendIntoContext(ctx, BlendMode::blendBrighten);
+    overlayCtx.leds.fadeToBlackBy(30);
 
     // time out idle patterns
     if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {

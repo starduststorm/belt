@@ -87,7 +87,12 @@ public:
   void setup() {
     // always keep motion running
     motionManager.subscribe();
-    startPatternAtIndex(initialPatternIndex);
+    Pattern *testPattern = TestIdlePattern();
+    if (testPattern) {
+      setActivePattern(testPattern, -1);
+    } else {
+      startPatternAtIndex(initialPatternIndex);
+    }
   }
 
   void nextPattern() {
@@ -262,13 +267,8 @@ public:
 
     // start a new random pattern if there is none
     if (activePattern == NULL) {
-      Pattern *testPattern = TestIdlePattern();
-      if (testPattern) {
-        setActivePattern(testPattern, -1);
-      } else {
-        int choice = (int)random8(patternConstructors.size());
-        startPatternAtIndex(choice);
-      }
+      int choice = (int)random8(patternConstructors.size());
+      startPatternAtIndex(choice);
     }
   }
 };

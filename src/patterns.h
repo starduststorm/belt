@@ -350,7 +350,7 @@ private:
     
     void update(DrawingContext ctx, float theta, float dtheta) {
       ctx.pushStyle();
-      ctx.drawStyle.wrap = true;
+      ctx.drawStyle.boundsBehavior = DrawStyle::wrap;
 
       switch (shape) {
         case rect22: {
@@ -589,7 +589,7 @@ public:
   void draw(CustomDrawingContext<WIDTH, HEIGHT, PixelType, PixelSetType> &ctx, int drawx, int drawy, BlendMode blendMode=blendSourceOver) {
     if (data == NULL) return;
     ctx.pushStyle();
-    ctx.drawStyle.wrap = true;
+    ctx.drawStyle.boundsBehavior = DrawStyle::wrap;
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) {
         ctx.point(x+drawx, y+drawy, data[y*width + x], blendMode);
@@ -714,7 +714,7 @@ public:
     float rotationVelocity = motionManager.twirlVelocity(rotationSamples);
 
     ctx.pushStyle();
-    ctx.drawStyle.wrap = true;
+    ctx.drawStyle.boundsBehavior = DrawStyle::wrap;
     
     for (int y = 0; y < ctx.height; ++y) {
       for (int x = 0; x < ctx.width / kBarWidth; ++x) {
@@ -1124,7 +1124,52 @@ public:
   }
 };
 
-/* ------------------- */
+/* ------------------------------------------------------------------------------------------------------ */
+
+class Triangles : public Pattern, public PaletteRotation<CRGBPalette16> {//, public FFTProcessing {
+public:
+  Triangles() {// : FFTProcessing(&audioManager, 10) {
+    ctx.drawStyle.boundsBehavior = DrawStyle::wrapX;
+  }
+  ~Triangles() {
+    motionManager.unsubscribe();
+  }
+
+  void setup() {
+    motionManager.subscribe();
+  }
+
+  float theta = 0;
+  void update() {
+    ctx.leds.fill_solid(CRGB::Black);
+    const float midY = TOTAL_HEIGHT/2-0.5;
+
+    // ctx.wuline(0,1,16,6,CRGB::White, CRGB::Red);
+    // return;
+    int count = 5;
+    float r = beatsin8(10, 40, 120) / 20.;
+    float xbase = beatsin8(6, 0, 64) / 4.;
+    for (int i = 0 ; i < count; ++i) {
+      float x1 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 0);
+      float x2 = xbase+ i * TOTAL_WIDTH/count + r*sinf(theta + 2*M_PI/3);
+      float x3 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 4*M_PI/3);
+      float y1 = midY + r*cosf(theta + 0);
+      float y2 = midY + r*cosf(theta + 2*M_PI/3);
+      float y3 = midY + r*cosf(theta + 4*M_PI/3);
+      ctx.line(x1,y1,x2,y2,CRGB::Red, CRGB::Green);
+      ctx.line(x2,y2,x3,y3,CRGB::Green, CRGB::Blue);
+      ctx.line(x3,y3,x1,y1,CRGB::Blue, CRGB::Red);
+    }
+    theta += 0.05;
+  }
+
+  const char *description() {
+    return "Triangles";
+  }
+};
+
+
+/* ------------------------------------------------------------------------------------------------------ */
 
 #define SECONDS_PER_PALETTE 20
 uint8_t gCurrentPaletteNumber = 0;

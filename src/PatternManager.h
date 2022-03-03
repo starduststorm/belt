@@ -51,6 +51,7 @@ class PatternManager {
       // testIdlePattern = new SpikeSpin();
       // testIdlePattern = new ArrowSpin();
       // testIdlePattern = new Compass();
+      // testIdlePattern = new Triangles();
     }
     return testIdlePattern;
   }
@@ -87,6 +88,7 @@ public:
   void setup() {
     // always keep motion running
     motionManager.subscribe();
+    
     Pattern *testPattern = TestIdlePattern();
     if (testPattern) {
       setActivePattern(testPattern, -1);

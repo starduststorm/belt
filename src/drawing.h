@@ -16,7 +16,7 @@ enum BlendMode {
 struct DrawStyle {
 public:
   BlendMode blendMode = blendSourceOver;
-  bool wrap = false;
+  enum BoundsBehavior { warn,wrap,clip,wrapX } boundsBehavior;
 };
 
 template<unsigned WIDTH, unsigned HEIGHT, class PixelType, class PixelSetType>
@@ -115,17 +115,30 @@ public:
   }
   
   void point(int x, int y, PixelType src, BlendMode blendMode) {
-    if (drawStyle.wrap) {
-      x = mod_wrap(x, width);
-      y = mod_wrap(y, width);
-    } else {
-      if (x < 0 || x >= width || y < 0 || y >= height) {
-        logf("point: (%i, %i) out of bounds", x, y);
-        // FIXME: is this more useful than asserting? or just assert during debug?
-        return;
-      }
-      assert(x >=0 && x < width, "point: x out of bounds");
-      assert(y >=0 && y < height, "point: y out of bounds");
+    switch (drawStyle.boundsBehavior) {
+      case DrawStyle::wrap:
+        x = mod_wrap(x, width);
+        y = mod_wrap(y, height);
+        break;
+      case DrawStyle::warn:
+        if (x < 0 || x >= width || y < 0 || y >= height) {
+          logf("point: (%i, %i) out of bounds", x, y);
+          // FIXME: is this more useful than asserting? or just assert during debug?
+        }
+        assert(x >=0 && x < width, "point: x out of bounds");
+        assert(y >=0 && y < height, "point: y out of bounds");
+        break;
+      case DrawStyle::clip:
+        if (x < 0 || x >= width || y < 0 || y >= height) {
+          return;
+        }
+        break;
+      case DrawStyle::wrapX:
+        if (y < 0 || y >= height) {
+          return;
+        }
+        x = mod_wrap(x, width);
+        break;
     }
     int index = ledxy(x, y, width, height);
     set_px(src, index, blendMode, 0xFF);
@@ -135,72 +148,87 @@ public:
     point(x, y, src, drawStyle.blendMode);
   }
   
-  void line(float x1, float y1, float x2, float y2, PixelType src1, PixelType src2, bool antialias=false) {
-    // TODO: fix antialiasing for diagonal lines
+  void point(int x, int y, PixelType src, float brightness) {
+    src.nscale8_video(brightness * 0xFF);
+    point(x, y, src);
+  }
+
+  // Wu's algorithm
+  static float fpart(float x) {
+    return x - floor(x);
+  }
+  static float rfpart(float x) {
+    return 1 - fpart(x);
+  }
+  void line(float x0, float y0, float x1, float y1, PixelType src0, PixelType src1) {
+    bool steep = fabs(y1 - y0) > fabs(x1 - x0);
     
-    bool useY = (x1 == x2 || fabsf((y2 - y1) / (float)(x2 - x1)) > 1);
-    if (useY) {
-      if (y1 == y2) {
-        // this is just a point
-        point(x1, y1, src1);
-        return;
-      }
-      if (y1 > y2) {
-        std::swap(y1, y2);
-        std::swap(x1, x2);
-      }
-      for (float y = y1; y <= y2; ++y) {
-        float x = x1 + (y - y1) / (float)(y2 - y1) * (x2 - x1);
-        PixelType src = src2.lerp8(src1, 0xFF * (uint8_t)(y-y1) / (uint8_t)(y2-y1));
-        if (antialias) {
-          float iptr;
-          float frac = fabsf(modff(y, &iptr));
-          float partial1 = floorf(y);
-          float partial2 = ceilf(y);
-          if (y < 0) {
-            std::swap(partial1, partial2);
-          }
-          PixelType src1 = src;
-          PixelType src2 = src;
-          point(round(x), partial1, src1.nscale8_video(0xFF * (1-frac)), blendAdd);
-          if (frac > 0) {
-            point(round(x), partial2, src2.nscale8_video(0xFF * frac), blendAdd);
-          }
-        } else {
-          point(round(x), round(y), src);
-        }
+    if (steep) {
+        std::swap(x0, y0);
+        std::swap(x1, y1);
+    }
+    if (x0 > x1) {
+        std::swap(x0, x1);
+        std::swap(y0, y1);
+        std::swap(src0, src1);
+    }
+    
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+
+    float gradient = (dx == 0.0 ? 1.0 : dy/dx);
+
+    // handle first endpoint
+    float xend = roundf(x0);
+    float yend = y0 + gradient * (xend - x0);
+    float xgap = rfpart(x0 + 0.5);
+    float xpxl1 = xend; // this will be used in the main loop
+    float ypxl1 = floorf(yend);
+    if (steep) {
+      point(ypxl1,   xpxl1, src0, rfpart(yend) * xgap);
+      point(ypxl1+1, xpxl1, src0,  fpart(yend) * xgap);
+    } else {
+      point(xpxl1, ypxl1  , src0, rfpart(yend) * xgap);
+      point(xpxl1, ypxl1+1, src0,  fpart(yend) * xgap);
+    }
+    float intery = yend + gradient; // first y-intersection for the main loop
+    
+    // handle second endpoint
+    xend = roundf(x1);
+    yend = y1 + gradient * (xend - x1);
+    xgap = fpart(x1 + 0.5);
+    float xpxl2 = xend; //this will be used in the main loop
+    float ypxl2 = floorf(yend);
+    if (steep) {
+      point(ypxl2  , xpxl2, src1, rfpart(yend) * xgap);
+      point(ypxl2+1, xpxl2, src1,  fpart(yend) * xgap);
+    } else {
+      point(xpxl2, ypxl2,   src1, rfpart(yend) * xgap);
+      point(xpxl2, ypxl2+1, src1,  fpart(yend) * xgap);
+    }
+    
+    // main loop
+    if (steep) {
+      assert(xpxl1 < xpxl2, "xpxl1 < xpxl2");
+      for (float x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
+        PixelType c = src0.lerp8(src1, 0xFF * (uint8_t)(x-(xpxl1 + 1)) / (uint8_t)(xpxl2 - 1-(xpxl1 + 1)));
+        point(floorf(intery)  , x, c, rfpart(intery));
+        point(floorf(intery)+1, x, c, fpart(intery));
+        intery = intery + gradient;
       }
     } else {
-      if (x1 > x2) {
-        std::swap(y1, y2);
-        std::swap(x1, x2);
-      }
-      for (float x = x1; x <= x2 + 0.0001; ++x) {
-        float y = y1 + (x - x1) / (float)(x2 - x1) * (y2 - y1);
-        PixelType src = src2.lerp8(src1, 0xFF * (uint8_t)(x-x1) / (uint8_t)(x2-x1));
-        if (antialias) {
-          float iptr;
-          float frac = fabsf(modff(x, &iptr));
-          float partial1 = floorf(x);
-          float partial2 = ceilf(x);
-          if (x < 0) {
-            std::swap(partial1, partial2);
-          }
-          PixelType src1 = src;
-          PixelType src2 = src;
-          point(partial1, round(y), src1.nscale8_video(0xFF * (1-frac)), blendAdd);
-          if (frac > 0) {
-            point(partial2, round(y), src2.nscale8_video(0xFF * frac), blendAdd);
-          }
-        } else {
-          point(round(x), round(y), src);
+      assert(xpxl1 < xpxl2, "xpxl1 < xpxl2");
+        for (float x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
+          PixelType c = src0.lerp8(src1, 0xFF * (uint8_t)(x-(xpxl1 + 1)) / (uint8_t)(xpxl2 - 1-(xpxl1 + 1)));
+          point(x, floorf(intery),   c, rfpart(intery));
+          point(x, floorf(intery)+1, c,  fpart(intery));
+          intery = intery + gradient;
         }
-      }
     }
   }
 
-  void line(float x1, float y1, float x2, float y2, PixelType src, bool antialias=false) {
-    line(x1, y1, x2, y2, src, src, antialias);
+  void line(float x1, float y1, float x2, float y2, PixelType src) {
+    line(x1, y1, x2, y2, src, src);
   }
 
   void circle(float centerX, float centerY, float radius, int ndiv, bool fill, PixelType src) {

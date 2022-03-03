@@ -18,22 +18,20 @@ struct Overlay {
 
 template <typename BufferType>
 class PatternManager {
-  int patternIndex = -1;
-  Pattern *activePattern = NULL;
-
   std::vector<Pattern * (*)(void)> patternConstructors;
+
+  int activePatternIndex = -1;
+  Pattern *activePattern = NULL;  // main pattern
+  
+  int tempPatternIndex = -1;
+  Pattern *tempPattern = NULL; // pattern displaying temporarily during motion event or crossfade
+
+  bool automaticPatternSwitching = false;
+  int autoSwitchLastPatternIndex = -1;
+  int autoSwitchAccumulator = 0;
   
   DrawingContext overlayCtx;
   std::vector<Overlay> overlays;
-
-  bool automaticPatternSwitching = false;
-
-  // track the last known low-motion event for auto-switching
-  // TODO: make better, more general, use cross fades
-  unsigned long lastLowEnergy = 0;
-
-  int initialPatternIndex = 0;
-  int highMotionPatternIndex = 0;
 
   template<class T>
   static Pattern *construct() {
@@ -56,6 +54,10 @@ class PatternManager {
     }
     return testIdlePattern;
   }
+
+    // "constants"
+  int initialPatternIndex = 0;
+  int highMotionPatternIndex = 0;
 
 public:
   BufferType &ctx;
@@ -89,15 +91,15 @@ public:
   }
 
   void nextPattern() {
-    patternIndex = (patternIndex + 1) % patternConstructors.size();
-    if (!startPatternAtIndex(patternIndex)) {
+    activePatternIndex = (activePatternIndex + 1) % patternConstructors.size();
+    if (!startPatternAtIndex(activePatternIndex)) {
       nextPattern();
     }
   }
 
   void previousPattern() {
-    patternIndex = mod_wrap(patternIndex - 1, patternConstructors.size());
-    if (!startPatternAtIndex(patternIndex)) {
+    activePatternIndex = mod_wrap(activePatternIndex - 1, patternConstructors.size());
+    if (!startPatternAtIndex(activePatternIndex)) {
       nextPattern();
     }
   }
@@ -107,26 +109,29 @@ public:
     logf("Pattern Automatic -> %s", (automaticPatternSwitching ? "ON" : "OFF"));
     
     RunOverlay(500, [this](DrawingContext ctx, float progress) {
-      float x1 = automaticPatternSwitching ? progress * PANEL_WIDTH : PANEL_WIDTH - progress * PANEL_WIDTH;
-      float x2 = automaticPatternSwitching ? 2*PANEL_WIDTH - progress * PANEL_WIDTH : PANEL_WIDTH + progress * PANEL_WIDTH;
+      int maxX = PANEL_WIDTH - 1;
+      float x1 = automaticPatternSwitching ? progress * maxX : maxX - progress * maxX;
+      float x2 = automaticPatternSwitching ? 2*maxX - progress * maxX : maxX + progress * maxX;
       ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
       ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
     });
   }
 
-  bool startPatternAtIndex(int index) {
+  inline Pattern *createPatternAtIndex(int index) {
     auto ctor = patternConstructors[index];
-    Pattern *nextPattern = ctor();
-    if (startPattern(nextPattern)) {
-      patternIndex = index;
-      return true;
-    } else {
-      delete nextPattern; // patternConstructors returns retained
-      return false;
-    }
+    return ctor();
   }
 
-  bool startPattern(Pattern *pattern) {
+  bool startPatternAtIndex(int index) {
+    Pattern *nextPattern = createPatternAtIndex(index);
+    if (setActivePattern(nextPattern, index)) {
+      return true;
+    }
+    delete nextPattern; // patternConstructors returns retained
+    return false;
+  }
+
+  bool setActivePattern(Pattern *pattern, int index) {
     if (activePattern) {
       activePattern->stop();
       delete activePattern;
@@ -136,37 +141,101 @@ public:
     if (pattern->wantsToRun()) {
       pattern->start();
       activePattern = pattern;
+      activePatternIndex = index;
       return true;
     } else {
       return false;
     }
   }
 
+  void startTempPatternAtIndex(int index) {
+    if (tempPattern) {
+      tempPattern->stop();
+      delete tempPattern;
+      tempPattern = NULL;
+    }
+    
+    Pattern *pattern = createPatternAtIndex(index);
+    if (pattern && pattern->wantsToRun()) {
+      pattern->start();
+      tempPattern = pattern;
+      tempPatternIndex = index;
+    } else if (pattern) {
+      delete pattern;
+    }
+  }
+
   void loop() {
     ctx.leds.fill_solid(CRGB::Black);
 
+    const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
+    
     if (automaticPatternSwitching) {
       // TODO: dial in all these values
-      const float kEnergyThresh = 60;
+      const float kLowEnergyThresh = 20;
+      const float kHighEnergyThresh = 60;
       
       motionManager.loop();
-      if (motionManager.bouncyEnergy() < kEnergyThresh) {
-        lastLowEnergy = millis();
+      float bouncyEnergy = motionManager.bouncyEnergy();
+      // EVERY_N_MILLIS(1000) {
+      //   logf("bouncyEnergy = %f, autoSwitchAccumulator = %i", bouncyEnergy, autoSwitchAccumulator);
+      // }
+      if (activePatternIndex != highMotionPatternIndex) {
+        if (bouncyEnergy > kHighEnergyThresh) {
+          if (!tempPattern) {
+            logf("long sustained motion, starting dust");
+            startTempPatternAtIndex(highMotionPatternIndex);
+            autoSwitchAccumulator = 0;
+          }
+          autoSwitchAccumulator++;
+        } else if (tempPattern) {
+          autoSwitchAccumulator--;
+        }
+      } else {
+        if (bouncyEnergy < kLowEnergyThresh) {
+          if (!tempPattern && autoSwitchLastPatternIndex != -1) {
+            logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
+            startTempPatternAtIndex(autoSwitchLastPatternIndex);
+            autoSwitchAccumulator = 0;
+          }
+          autoSwitchAccumulator++;
+        } else if (tempPattern) {
+          autoSwitchAccumulator--;
+        }
       }
-      // logf("motionManager.bouncyEnergy() = %f", motionManager.bouncyEnergy());
-      if (lastLowEnergy != 0 && millis() - lastLowEnergy > 5000) {
-        // 5 seconds of sustained motion
-        if (patternIndex != highMotionPatternIndex) {
-          logf("long sustained motion, switching to dust");
-          startPatternAtIndex(highMotionPatternIndex);
-          lastLowEnergy = 0;
+
+      // cancel auto switch
+      if (tempPattern && autoSwitchAccumulator < -90) {
+        logf("autoswitch crossfade cancel");
+        tempPattern->stop();
+        delete tempPattern;
+        tempPattern = NULL;
+        autoSwitchAccumulator = 0;
+      }
+
+      if (tempPattern && autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
+        // we've finished the crossfade
+        logf("autoswitch crossfade finished");
+        if (activePattern) {
+          autoSwitchLastPatternIndex = activePatternIndex;
+          activePattern->stop();
+          delete activePattern;
+          activePattern = tempPattern;
+          activePatternIndex = tempPatternIndex;
+          tempPattern = NULL;
+          tempPatternIndex = -1;
+          autoSwitchAccumulator = 0;
         }
       }
     }
 
     if (activePattern) {
       activePattern->loop();
-      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF);
+      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF - 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+    }
+    if (tempPattern) {
+      tempPattern->loop();
+      tempPattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
     }
 
     for (auto it = overlays.begin(); it != overlays.end(); ) {
@@ -195,7 +264,7 @@ public:
     if (activePattern == NULL) {
       Pattern *testPattern = TestIdlePattern();
       if (testPattern) {
-        startPattern(testPattern);
+        setActivePattern(testPattern, -1);
       } else {
         int choice = (int)random8(patternConstructors.size());
         startPatternAtIndex(choice);

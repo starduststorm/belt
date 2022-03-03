@@ -22,7 +22,7 @@ private:
   
 public:
   Adafruit_BNO055 bno;
-  MotionManager() : accelerationStats(450) {
+  MotionManager() : accelerationStats(900) {
     bno = Adafruit_BNO055(55, 0x28);
     
     bool hasBNO = bno.begin(bno.OPERATION_MODE_NDOF);
@@ -94,7 +94,6 @@ public:
     bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
     // logf("accel, lin_accel: (%0.3f, %0.3f)", accel.acceleration.x, linear_accel.acceleration.x);
 
-    // FIXME: Run MotionManager all the time so it can run activity classifiers
     // a "jump" is a short interval between linear_accel.acceleration.x moving high and then low, indicating the liftoff and then land
     const int kJumpClockMin = 80;
     const int kJumpClockMax = 250;

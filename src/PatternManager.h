@@ -66,6 +66,7 @@ public:
   PatternManager(BufferType &ctx) : ctx(ctx) {
     patternConstructors.push_back(&(construct<Compass>));
     patternConstructors.push_back(&(construct<Bars>));
+    patternConstructors.push_back(&(construct<Triangles>));
     patternConstructors.push_back(&(construct<SpikeSpin>));
     patternConstructors.push_back(&(construct<ArrowSpin>)); initialPatternIndex = patternConstructors.size()-1;
     patternConstructors.push_back(&(construct<PixelDust>)); highMotionPatternIndex = patternConstructors.size()-1;

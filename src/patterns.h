@@ -1130,6 +1130,7 @@ class Triangles : public Pattern, public PaletteRotation<CRGBPalette16> {//, pub
 public:
   Triangles() {// : FFTProcessing(&audioManager, 10) {
     ctx.drawStyle.boundsBehavior = DrawStyle::wrapX;
+    ctx.drawStyle.blendMode = blendBrighten;
   }
   ~Triangles() {
     motionManager.unsubscribe();
@@ -1137,30 +1138,48 @@ public:
 
   void setup() {
     motionManager.subscribe();
+    pauseRotation = false;
   }
 
   float theta = 0;
   void update() {
     ctx.leds.fill_solid(CRGB::Black);
-    const float midY = TOTAL_HEIGHT/2-0.5;
+    // ctx.leds.fadeToBlackBy(1);
 
-    // ctx.wuline(0,1,16,6,CRGB::White, CRGB::Red);
-    // return;
-    int count = 5;
-    float r = beatsin8(10, 40, 120) / 20.;
-    float xbase = beatsin8(6, 0, 64) / 4.;
+    int count = 6;
+    // float r = beatsin8(10, 40, 120) / 20.;
+    float r = 2+fabsf(motionManager.twirlVelocity(10));
+    
+    
+    sensors_event_t event;
+    motionManager.getEvent(&event);
+    float xbase = -event.orientation.x * 64 / 360;
+    // float xbase = beatsin8(6, 0, 64) / 4.;
+
+    float midY = TOTAL_HEIGHT/2-0.5;
+    // heading is leaning forward and back, -180, 180
+    // pitch is leaning left and right -90,90?
+    // roll is twirl 0,360
+    // logf("heading, pitch, roll: (%0.2f, %0.2f, %0.2f)", event.gyro.heading, event.gyro.pitch, event.gyro.roll);
+
     for (int i = 0 ; i < count; ++i) {
+      CRGB c1 = getPaletteColor(millis() / 100 + 0   + 12*i + 5*r*i);
+      CRGB c2 = getPaletteColor(millis() / 100 + 85  + 12*i + 5*r*i);
+      CRGB c3 = getPaletteColor(millis() / 100 + 170 + 12*i + 5*r*i);
+
       float x1 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 0);
-      float x2 = xbase+ i * TOTAL_WIDTH/count + r*sinf(theta + 2*M_PI/3);
+      float x2 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 2*M_PI/3);
       float x3 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 4*M_PI/3);
       float y1 = midY + r*cosf(theta + 0);
       float y2 = midY + r*cosf(theta + 2*M_PI/3);
       float y3 = midY + r*cosf(theta + 4*M_PI/3);
-      ctx.line(x1,y1,x2,y2,CRGB::Red, CRGB::Green);
-      ctx.line(x2,y2,x3,y3,CRGB::Green, CRGB::Blue);
-      ctx.line(x3,y3,x1,y1,CRGB::Blue, CRGB::Red);
+
+      ctx.line(x1,y1,x2,y2,c1, c2);
+      ctx.line(x2,y2,x3,y3,c2, c3);
+      ctx.line(x3,y3,x1,y1,c3, c1);
     }
-    theta += 0.05;
+    // theta += 0.05;
+    theta -= motionManager.twirlVelocity(10) / 10.;
   }
 
   const char *description() {

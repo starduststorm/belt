@@ -6,15 +6,15 @@
 #include "patterns.h"
 
 /* ---- Test Options ---- */
-const bool kTestPatternTransitions = false;
-const long kIdlePatternTimeout = -1;//1000 * (kTestPatternTransitions ? 20 : 60 * 2);
+const long kIdlePatternTimeout = -1;
+#define kTestAutomaticModeEnergyChange false
 
 typedef std::function<void(DrawingContext ctx, float progress)> OverlayTick;
 struct Overlay {
   unsigned long start;
   unsigned long duration;
   OverlayTick tick;
-}; 
+};
 
 template <typename BufferType>
 class PatternManager {
@@ -32,6 +32,7 @@ class PatternManager {
   
   DrawingContext overlayCtx;
   std::vector<Overlay> overlays;
+  unsigned long lastOverlayActive = 0;
 
   template<class T>
   static Pattern *construct() {
@@ -99,6 +100,8 @@ public:
   }
 
   void nextPattern() {
+    if (automaticPatternSwitching) toggleAutoPattern();
+
     activePatternIndex = (activePatternIndex + 1) % patternConstructors.size();
     if (!startPatternAtIndex(activePatternIndex)) {
       nextPattern();
@@ -106,23 +109,30 @@ public:
   }
 
   void previousPattern() {
+    if (automaticPatternSwitching) toggleAutoPattern();
+
     activePatternIndex = mod_wrap(activePatternIndex - 1, patternConstructors.size());
     if (!startPatternAtIndex(activePatternIndex)) {
       nextPattern();
     }
   }
 
-  void toggleAutoPattern() {
+  // TODO: change the button action to always just "enable" and show a more intresting modal instead of this boring overlay. main.cpp can run the Modal when the button is pressed only.
+  void toggleAutoPattern(bool runOverlay=false) {
     automaticPatternSwitching = !automaticPatternSwitching;
+    if (!automaticPatternSwitching) {
+      autoSwitchLastPatternIndex = -1;
+    }
     logf("Pattern Automatic -> %s", (automaticPatternSwitching ? "ON" : "OFF"));
-    
-    RunOverlay(500, [this](DrawingContext ctx, float progress) {
-      int maxX = PANEL_WIDTH - 1;
-      float x1 = automaticPatternSwitching ? progress * maxX : maxX - progress * maxX;
-      float x2 = automaticPatternSwitching ? 2*maxX - progress * maxX : maxX + progress * maxX;
-      ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
-      ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
-    });
+    if (runOverlay) {
+      RunOverlay(500, [this](DrawingContext ctx, float progress) {
+        int maxX = PANEL_WIDTH - 1;
+        float x1 = automaticPatternSwitching ? progress * maxX : maxX - progress * maxX;
+        float x2 = automaticPatternSwitching ? 2*maxX - progress * maxX : maxX + progress * maxX;
+        ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
+        ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
+      });
+    }
   }
 
   inline Pattern *createPatternAtIndex(int index) {
@@ -140,6 +150,12 @@ public:
   }
 
   bool setActivePattern(Pattern *pattern, int index) {
+    if (tempPattern) {
+      tempPattern->stop();
+      delete tempPattern;
+      tempPattern = NULL;
+    }
+
     if (activePattern) {
       activePattern->stop();
       delete activePattern;
@@ -178,13 +194,22 @@ public:
 
     const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
     
+    // TODO: automatic mode being on at all is current dropping us about 6fps from 78 down to 72, where's all that time going?
     if (automaticPatternSwitching) {
       // TODO: dial in all these values
-      const float kLowEnergyThresh = 20;
+      const float kLowEnergyThresh = 10;
       const float kHighEnergyThresh = 60;
       
       motionManager.loop();
+#if !kTestAutomaticModeEnergyChange
       float bouncyEnergy = motionManager.bouncyEnergy();
+#else
+      float bouncyEnergy = beatsin8(1, 0, 70);
+      EVERY_N_MILLIS(500) {
+        logf("test bouncyEnergy = %i", (int)bouncyEnergy);
+      }
+#endif
+
       // EVERY_N_MILLIS(1000) {
       //   logf("bouncyEnergy = %f, autoSwitchAccumulator = %i", bouncyEnergy, autoSwitchAccumulator);
       // }
@@ -199,9 +224,9 @@ public:
         } else if (tempPattern) {
           autoSwitchAccumulator--;
         }
-      } else {
+      } else if (autoSwitchLastPatternIndex != -1) {
         if (bouncyEnergy < kLowEnergyThresh) {
-          if (!tempPattern && autoSwitchLastPatternIndex != -1) {
+          if (!tempPattern) {
             logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
             startTempPatternAtIndex(autoSwitchLastPatternIndex);
             autoSwitchAccumulator = 0;
@@ -247,6 +272,7 @@ public:
     }
 
     for (auto it = overlays.begin(); it != overlays.end(); ) {
+      lastOverlayActive = millis();
       Overlay overlay = *it;
       if (overlay.start + overlay.duration < millis()) {
         overlays.erase(it);
@@ -256,8 +282,11 @@ public:
         ++it;
       }
     }
-    overlayCtx.blendIntoContext(ctx, BlendMode::blendBrighten);
-    overlayCtx.leds.fadeToBlackBy(30);
+
+    if (millis() - lastOverlayActive < 500) {
+      overlayCtx.blendIntoContext(ctx, BlendMode::blendBrighten);
+      overlayCtx.leds.fadeToBlackBy(30);
+    }
 
     // time out idle patterns
     if (activePattern != NULL && kIdlePatternTimeout != -1 && activePattern->isRunning() && activePattern->runTime() > kIdlePatternTimeout) {

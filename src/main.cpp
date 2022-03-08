@@ -61,7 +61,7 @@ void buttonDoublePress() {
 }
 
 void buttonLongPress() {
-  patternManager.toggleAutoPattern();
+  patternManager.toggleAutoPattern(true);
 }
 
 void buttonDoubleLongPress() {

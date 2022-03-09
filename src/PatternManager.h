@@ -22,9 +22,13 @@ class PatternManager {
 
   int activePatternIndex = -1;
   Pattern *activePattern = NULL;  // main pattern
+  uint8_t activePatternBrightness = 0xFF;
+  uint8_t targetActivePatternBrightness = 0xFF;
   
   int tempPatternIndex = -1;
   Pattern *tempPattern = NULL; // pattern displaying temporarily during motion event or crossfade
+  uint8_t tempPatternBrightness = 0xFF;
+  uint8_t targetTempPatternBrightness = 0xFF;
 
   bool automaticPatternSwitching = false;
   int autoSwitchLastPatternIndex = -1;
@@ -189,86 +193,116 @@ public:
     }
   }
 
+  void setActivePatternBrightness(uint8_t brightness, bool animated=false) {
+    targetActivePatternBrightness = brightness;
+    if (!animated) {
+      activePatternBrightness = brightness;
+    }
+  }
+
+  void setTempPatternBrightness(uint8_t brightness, bool animated=false) {
+    targetTempPatternBrightness = brightness;
+    if (!animated) {
+      tempPatternBrightness = brightness;
+    }
+  }
+
+  void handleAutomaticPatternMode() {
+    assert(automaticPatternSwitching == true, "automode");
+    // TODO: dial in all these values
+    const float kLowEnergyThresh = 10;
+    const float kHighEnergyThresh = 60;
+    const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
+    
+    motionManager.loop();
+#if !kTestAutomaticModeEnergyChange
+    float bouncyEnergy = motionManager.bouncyEnergy();
+#else
+    float bouncyEnergy = beatsin8(1, 0, 70);
+    EVERY_N_MILLIS(500) {
+      logf("test bouncyEnergy = %i", (int)bouncyEnergy);
+    }
+#endif
+
+    // EVERY_N_MILLIS(1000) {
+    //   logf("bouncyEnergy = %f, autoSwitchAccumulator = %i", bouncyEnergy, autoSwitchAccumulator);
+    // }
+    if (activePatternIndex != highMotionPatternIndex) {
+      if (bouncyEnergy > kHighEnergyThresh) {
+        if (!tempPattern) {
+          logf("long sustained motion, starting dust");
+          startTempPatternAtIndex(highMotionPatternIndex);
+          autoSwitchAccumulator = 0;
+        }
+        autoSwitchAccumulator++;
+      } else if (tempPattern) {
+        autoSwitchAccumulator--;
+      }
+    } else if (autoSwitchLastPatternIndex != -1) {
+      if (bouncyEnergy < kLowEnergyThresh) {
+        if (!tempPattern) {
+          logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
+          startTempPatternAtIndex(autoSwitchLastPatternIndex);
+          autoSwitchAccumulator = 0;
+        }
+        autoSwitchAccumulator++;
+      } else if (tempPattern) {
+        autoSwitchAccumulator--;
+      }
+    }
+
+    // cancel auto switch
+    if (tempPattern && autoSwitchAccumulator < -90) {
+      logf("autoswitch crossfade cancel");
+      tempPattern->stop();
+      delete tempPattern;
+      tempPattern = NULL;
+      autoSwitchAccumulator = 0;
+    }
+
+    if (tempPattern && autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
+      // we've finished the crossfade
+      logf("autoswitch crossfade finished");
+      if (activePattern) {
+        autoSwitchLastPatternIndex = activePatternIndex;
+        activePattern->stop();
+        delete activePattern;
+        activePattern = tempPattern;
+        activePatternIndex = tempPatternIndex;
+        tempPattern = NULL;
+        tempPatternIndex = -1;
+        autoSwitchAccumulator = 0;
+      }
+      setActivePatternBrightness(0xFF);
+      setTempPatternBrightness(0);
+    } else if (tempPattern) {
+      setActivePatternBrightness(0xFF - 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+      setTempPatternBrightness(0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+    }
+  }
+
   void loop() {
     ctx.leds.fill_solid(CRGB::Black);
-
-    const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
     
     // TODO: automatic mode being on at all is current dropping us about 6fps from 78 down to 72, where's all that time going?
     if (automaticPatternSwitching) {
-      // TODO: dial in all these values
-      const float kLowEnergyThresh = 10;
-      const float kHighEnergyThresh = 60;
-      
-      motionManager.loop();
-#if !kTestAutomaticModeEnergyChange
-      float bouncyEnergy = motionManager.bouncyEnergy();
-#else
-      float bouncyEnergy = beatsin8(1, 0, 70);
-      EVERY_N_MILLIS(500) {
-        logf("test bouncyEnergy = %i", (int)bouncyEnergy);
-      }
-#endif
+      handleAutomaticPatternMode();
+    }
 
-      // EVERY_N_MILLIS(1000) {
-      //   logf("bouncyEnergy = %f, autoSwitchAccumulator = %i", bouncyEnergy, autoSwitchAccumulator);
-      // }
-      if (activePatternIndex != highMotionPatternIndex) {
-        if (bouncyEnergy > kHighEnergyThresh) {
-          if (!tempPattern) {
-            logf("long sustained motion, starting dust");
-            startTempPatternAtIndex(highMotionPatternIndex);
-            autoSwitchAccumulator = 0;
-          }
-          autoSwitchAccumulator++;
-        } else if (tempPattern) {
-          autoSwitchAccumulator--;
-        }
-      } else if (autoSwitchLastPatternIndex != -1) {
-        if (bouncyEnergy < kLowEnergyThresh) {
-          if (!tempPattern) {
-            logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
-            startTempPatternAtIndex(autoSwitchLastPatternIndex);
-            autoSwitchAccumulator = 0;
-          }
-          autoSwitchAccumulator++;
-        } else if (tempPattern) {
-          autoSwitchAccumulator--;
-        }
-      }
-
-      // cancel auto switch
-      if (tempPattern && autoSwitchAccumulator < -90) {
-        logf("autoswitch crossfade cancel");
-        tempPattern->stop();
-        delete tempPattern;
-        tempPattern = NULL;
-        autoSwitchAccumulator = 0;
-      }
-
-      if (tempPattern && autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
-        // we've finished the crossfade
-        logf("autoswitch crossfade finished");
-        if (activePattern) {
-          autoSwitchLastPatternIndex = activePatternIndex;
-          activePattern->stop();
-          delete activePattern;
-          activePattern = tempPattern;
-          activePatternIndex = tempPatternIndex;
-          tempPattern = NULL;
-          tempPatternIndex = -1;
-          autoSwitchAccumulator = 0;
-        }
-      }
+    if (activePatternBrightness != targetActivePatternBrightness) {
+      activePatternBrightness += sgn((int)targetActivePatternBrightness - (int)activePatternBrightness);
+    }
+    if (tempPatternBrightness != targetTempPatternBrightness) {
+      tempPatternBrightness += sgn((int)targetTempPatternBrightness - (int)tempPatternBrightness);
     }
 
     if (activePattern) {
       activePattern->loop();
-      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF - 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, activePatternBrightness);
     }
     if (tempPattern) {
       tempPattern->loop();
-      tempPattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+      tempPattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, tempPatternBrightness);
     }
 
     for (auto it = overlays.begin(); it != overlays.end(); ) {

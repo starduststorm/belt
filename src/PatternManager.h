@@ -22,15 +22,13 @@ class PatternManager {
 
   int activePatternIndex = -1;
   Pattern *activePattern = NULL;  // main pattern
-  uint8_t activePatternBrightness = 0xFF;
-  uint8_t targetActivePatternBrightness = 0xFF;
   
   int tempPatternIndex = -1;
   Pattern *tempPattern = NULL; // pattern displaying temporarily during motion event or crossfade
-  uint8_t tempPatternBrightness = 0xFF;
-  uint8_t targetTempPatternBrightness = 0xFF;
 
-  bool automaticPatternSwitching = false;
+  bool automaticMode = false;
+
+  enum { singlePattern, energyCrossfade } compositionState = singlePattern;
   int autoSwitchLastPatternIndex = -1;
   int autoSwitchAccumulator = 0;
   
@@ -104,7 +102,7 @@ public:
   }
 
   void nextPattern() {
-    if (automaticPatternSwitching) toggleAutoPattern();
+    if (automaticMode) toggleAutoPattern();
 
     activePatternIndex = (activePatternIndex + 1) % patternConstructors.size();
     if (!startPatternAtIndex(activePatternIndex)) {
@@ -113,7 +111,7 @@ public:
   }
 
   void previousPattern() {
-    if (automaticPatternSwitching) toggleAutoPattern();
+    if (automaticMode) toggleAutoPattern();
 
     activePatternIndex = mod_wrap(activePatternIndex - 1, patternConstructors.size());
     if (!startPatternAtIndex(activePatternIndex)) {
@@ -123,16 +121,16 @@ public:
 
   // TODO: change the button action to always just "enable" and show a more intresting modal instead of this boring overlay. main.cpp can run the Modal when the button is pressed only.
   void toggleAutoPattern(bool runOverlay=false) {
-    automaticPatternSwitching = !automaticPatternSwitching;
-    if (!automaticPatternSwitching) {
+    automaticMode = !automaticMode;
+    if (!automaticMode) {
       autoSwitchLastPatternIndex = -1;
     }
-    logf("Pattern Automatic -> %s", (automaticPatternSwitching ? "ON" : "OFF"));
+    logf("Pattern Automatic -> %s", (automaticMode ? "ON" : "OFF"));
     if (runOverlay) {
       RunOverlay(500, [this](DrawingContext ctx, float progress) {
         int maxX = PANEL_WIDTH - 1;
-        float x1 = automaticPatternSwitching ? progress * maxX : maxX - progress * maxX;
-        float x2 = automaticPatternSwitching ? 2*maxX - progress * maxX : maxX + progress * maxX;
+        float x1 = automaticMode ? progress * maxX : maxX - progress * maxX;
+        float x2 = automaticMode ? 2*maxX - progress * maxX : maxX + progress * maxX;
         ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
         ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
       });
@@ -193,22 +191,8 @@ public:
     }
   }
 
-  void setActivePatternBrightness(uint8_t brightness, bool animated=false) {
-    targetActivePatternBrightness = brightness;
-    if (!animated) {
-      activePatternBrightness = brightness;
-    }
-  }
-
-  void setTempPatternBrightness(uint8_t brightness, bool animated=false) {
-    targetTempPatternBrightness = brightness;
-    if (!animated) {
-      tempPatternBrightness = brightness;
-    }
-  }
-
   void handleAutomaticPatternMode() {
-    assert(automaticPatternSwitching == true, "automode");
+    assert(automaticMode == true, "automode");
     // TODO: dial in all these values
     const float kLowEnergyThresh = 10;
     const float kHighEnergyThresh = 60;
@@ -233,9 +217,12 @@ public:
           logf("long sustained motion, starting dust");
           startTempPatternAtIndex(highMotionPatternIndex);
           autoSwitchAccumulator = 0;
+          compositionState = energyCrossfade;
         }
-        autoSwitchAccumulator++;
-      } else if (tempPattern) {
+        if (compositionState == energyCrossfade) {
+          autoSwitchAccumulator++;
+        }
+      } else if (compositionState == energyCrossfade) {
         autoSwitchAccumulator--;
       }
     } else if (autoSwitchLastPatternIndex != -1) {
@@ -244,40 +231,48 @@ public:
           logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
           startTempPatternAtIndex(autoSwitchLastPatternIndex);
           autoSwitchAccumulator = 0;
+          compositionState = energyCrossfade;
         }
-        autoSwitchAccumulator++;
-      } else if (tempPattern) {
+        if (compositionState == energyCrossfade) {
+          autoSwitchAccumulator++;
+        }
+      } else if (compositionState == energyCrossfade) {
         autoSwitchAccumulator--;
       }
     }
 
-    // cancel auto switch
-    if (tempPattern && autoSwitchAccumulator < -90) {
-      logf("autoswitch crossfade cancel");
-      tempPattern->stop();
-      delete tempPattern;
-      tempPattern = NULL;
-      autoSwitchAccumulator = 0;
-    }
-
-    if (tempPattern && autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
-      // we've finished the crossfade
-      logf("autoswitch crossfade finished");
-      if (activePattern) {
-        autoSwitchLastPatternIndex = activePatternIndex;
-        activePattern->stop();
-        delete activePattern;
-        activePattern = tempPattern;
-        activePatternIndex = tempPatternIndex;
-        tempPattern = NULL;
-        tempPatternIndex = -1;
+    if (compositionState == energyCrossfade) {
+      if (autoSwitchAccumulator < -90) {
+        logf("autoswitch crossfade cancel");
+        if (tempPattern) {
+          tempPattern->stop();
+          delete tempPattern;
+          tempPattern = NULL;
+        }
         autoSwitchAccumulator = 0;
+        compositionState = singlePattern;
+      } else if (autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
+        logf("autoswitch crossfade finished");
+        if (activePattern && tempPattern) {
+          autoSwitchLastPatternIndex = activePatternIndex;
+          activePattern->stop();
+          delete activePattern;
+          activePattern = tempPattern;
+          activePatternIndex = tempPatternIndex;
+          tempPattern = NULL;
+          tempPatternIndex = -1;
+          autoSwitchAccumulator = 0;
+          activePattern->setBrightness(0xFF);
+        }
+        compositionState = singlePattern;
+      } else {
+        if (activePattern) {
+          activePattern->setBrightness(0xFF - 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+        }
+        if (tempPattern) {
+          tempPattern->setBrightness(0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
+        }
       }
-      setActivePatternBrightness(0xFF);
-      setTempPatternBrightness(0);
-    } else if (tempPattern) {
-      setActivePatternBrightness(0xFF - 0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
-      setTempPatternBrightness(0xFF * max(0,autoSwitchAccumulator) / kAutoCrossfadeFrameRequirement);
     }
   }
 
@@ -285,24 +280,18 @@ public:
     ctx.leds.fill_solid(CRGB::Black);
     
     // TODO: automatic mode being on at all is current dropping us about 6fps from 78 down to 72, where's all that time going?
-    if (automaticPatternSwitching) {
+    if (automaticMode) {
       handleAutomaticPatternMode();
-    }
-
-    if (activePatternBrightness != targetActivePatternBrightness) {
-      activePatternBrightness += sgn((int)targetActivePatternBrightness - (int)activePatternBrightness);
-    }
-    if (tempPatternBrightness != targetTempPatternBrightness) {
-      tempPatternBrightness += sgn((int)targetTempPatternBrightness - (int)tempPatternBrightness);
     }
 
     if (activePattern) {
       activePattern->loop();
-      activePattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, activePatternBrightness);
+      activePattern->composeIntoContext(ctx);
+      
     }
     if (tempPattern) {
       tempPattern->loop();
-      tempPattern->ctx.blendIntoContext(ctx, BlendMode::blendBrighten, tempPatternBrightness);
+      tempPattern->composeIntoContext(ctx);
     }
 
     for (auto it = overlays.begin(); it != overlays.end(); ) {

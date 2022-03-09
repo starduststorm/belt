@@ -21,13 +21,42 @@
 MotionManager motionManager;
 AudioManager audioManager;
 
-class Pattern {
+class Composable {
+private:
+  uint8_t brightness = 0xFF;
+  uint8_t targetBrightness = 0xFF;
+  uint8_t animationSpeed = 1;
+public:
+  virtual ~Composable() { }
+  DrawingContext ctx;
+  
+  void setBrightness(uint8_t b, bool animated=false, uint8_t speed=1) {
+    targetBrightness = b;
+    animationSpeed = speed;
+    if (!animated) {
+      brightness = b;
+    }
+  }
+
+  template<unsigned WIDTH, unsigned HEIGHT, class PixelType, class PixelSetType>
+  void composeIntoContext(CustomDrawingContext<WIDTH, HEIGHT, PixelType, PixelSetType> &otherContext) {
+    if (brightness != targetBrightness) {
+      if (abs(targetBrightness - brightness) < animationSpeed) {
+        brightness = targetBrightness;
+      } else {
+        brightness += animationSpeed * sgn((int)targetBrightness - (int)brightness);
+      }
+    }
+    this->ctx.blendIntoContext(otherContext, BlendMode::blendBrighten, brightness);
+  }
+};
+
+class Pattern : public Composable {
 private:  
   long startTime = -1;
   long stopTime = -1;
   long lastUpdateTime = -1;
 public:
-  DrawingContext ctx;
   virtual ~Pattern() { }
 
   void start() {

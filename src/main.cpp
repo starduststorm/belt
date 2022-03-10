@@ -52,6 +52,22 @@ void applyBrightnessSettings();
 #define THUMBDIAL2_PIN A2
 #define BUTTON_PIN 0
 
+void DrawModal(int fps, unsigned long durationMillis, std::function<void(float progress)> tick) {
+  int delayMillis = 1000/fps;
+  unsigned long start = millis();
+  unsigned long elapsed = 0;
+  do {
+    float progress = min(1.0, max(0.0, (millis() - start) / (float)durationMillis));
+    tick(progress);
+    FastLED.show();
+    delay(delayMillis);
+    elapsed = millis() - start;
+  } while (elapsed < durationMillis);
+  tick(1.0);
+  FastLED.show();
+  FastLED.delay(delayMillis);
+}
+
 void buttonSinglePress() {
   patternManager.nextPattern();
 }
@@ -61,7 +77,32 @@ void buttonDoublePress() {
 }
 
 void buttonLongPress() {
-  patternManager.toggleAutoPattern(true);
+  DrawModal(90, 150, [](float progress) {
+    ctx.leds.fadeToBlackBy(20);
+  });
+  ctx.leds.fill_solid(CRGB::Black);
+  DrawModal(90, 1200, [](float progress) {
+    ctx.pushStyle();
+    ctx.drawStyle.boundsBehavior = DrawStyle::clip;
+    for (int p = 0; p < 2; ++p) {
+      float centerx = (p+1)*PANEL_WIDTH-PANEL_WIDTH/2-0.5;
+      float centery = TOTAL_HEIGHT/2. - 0.5;
+      int lineCount = 8;
+      float bc = 0.3;
+      uint8_t brightness = 0xFF * (progress < bc ? progress/bc : progress > (1.0-bc) ? 1.0 - (progress - (1.0-bc)) / bc : 1.0);
+      float rotationTheta = millis() / 1000. * M_PI;
+      float radius = PANEL_WIDTH/2-0.5;
+      ctx.leds.fadeToBlackBy(50);
+      for (int i = 0; i < lineCount; ++i) {
+        ctx.line(centerx, centery, centerx + radius * sin(rotationTheta + i / (float)lineCount * 2 * M_PI), 
+                                   centery + radius * cos(rotationTheta + i / (float)lineCount * 2 * M_PI), 
+                                   CHSV(0xFF * i/(float)lineCount, 0xFF, brightness));
+      }
+    }
+    ctx.popStyle();
+  });
+  ctx.leds.fill_solid(CRGB::Black);
+  patternManager.enableAutomaticMode();
 }
 
 void buttonDoubleLongPress() {

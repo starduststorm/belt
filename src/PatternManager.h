@@ -138,36 +138,26 @@ public:
   }
 
   void nextPattern() {
-    if (automaticMode) toggleAutoPattern();
-
+    disableAutomaticMode();
     activePatternIndex = (activePatternIndex + 1) % allPatterns.size();
     startPatternAtIndex(activePatternIndex);
   }
 
   void previousPattern() {
-    if (automaticMode) toggleAutoPattern();
-
+    disableAutomaticMode();
     activePatternIndex = mod_wrap(activePatternIndex - 1, allPatterns.size());
     startPatternAtIndex(activePatternIndex);
   }
 
-  // TODO: change the button action to always just "enable" and show a more intresting modal instead of this boring overlay. main.cpp can run the Modal when the button is pressed only.
-  void toggleAutoPattern(bool runOverlay=false) {
-    automaticMode = !automaticMode;
-    if (!automaticMode) {
-      compositionState = singlePattern;
-      autoSwitchLastPatternIndex = -1;
-    }
-    logf("Pattern Automatic -> %s", (automaticMode ? "ON" : "OFF"));
-    if (runOverlay) {
-      RunOverlay(500, [this](DrawingContext ctx, float progress) {
-        int maxX = PANEL_WIDTH - 1;
-        float x1 = automaticMode ? progress * maxX : maxX - progress * maxX;
-        float x2 = automaticMode ? 2*maxX - progress * maxX : maxX + progress * maxX;
-        ctx.line(x1, 0, x1, PANEL_HEIGHT-1, CRGB::White);
-        ctx.line(x2, 0, x2, PANEL_HEIGHT-1, CRGB::White);
-      });
-    }
+  void enableAutomaticMode() {
+    automaticMode = true;
+  }
+
+  void disableAutomaticMode() {
+    automaticMode = false;
+    compositionState = singlePattern;
+    autoSwitchLastPatternIndex = -1;
+    stopTempPattern();
   }
 
   inline Pattern *createPatternAtIndex(int index) {
@@ -180,8 +170,6 @@ public:
   }
 
   void setActivePattern(Pattern *pattern, int index) {
-    stopTempPattern();
-
     if (activePattern) {
       activePattern->stop();
       delete activePattern;

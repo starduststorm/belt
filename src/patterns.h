@@ -733,6 +733,7 @@ public:
 
     ctx.pushStyle();
     ctx.drawStyle.boundsBehavior = DrawStyle::wrap;
+    ctx.drawStyle.blendMode = blendBrighten;
     
     for (int y = 0; y < ctx.height; ++y) {
       for (int x = 0; x < ctx.width / kBarWidth; ++x) {
@@ -745,7 +746,7 @@ public:
         float x2 = row_startx + (x+1)*kBarWidth - 1;
 
         CRGB color = getTrackedColor(y * ctx.width / kBarWidth / 2 + x / 2);
-        ctx.line(x1, y, x2, y, color, true);
+        ctx.line(x1, y, x2, y, color);
       }
       xoffsets[y] += xvelocities[y] * frameTime() / 30.0 * rotationVelocity;
       if (xoffsets[y] > ctx.width) {

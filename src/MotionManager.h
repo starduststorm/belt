@@ -6,7 +6,7 @@
 #include <vector>
 #include "stats.h"
 
-#define kTestTwirlVelocity false
+#define kTestTwirlBPM 0 // 0 for off, 5 is slowish, 17 is enough to trigger rotation overlays
 
 typedef enum : unsigned int {
   JumpActivity,
@@ -145,8 +145,8 @@ public:
     // FIXME: rework the twirl accumulator so this can be called multiple times in a single frame without smashing the accumulator, since MotionManager is a singleton.
     float orientation;
 
-#if kTestTwirlVelocity
-    orientation = (beatsin16(17, 0, 1000) - 500) / 2;
+#if kTestTwirlBPM != 0
+    orientation = (beatsin16(kTestTwirlBPM, 0, 1000) - 500) / 2;
 #else
     sensors_event_t event;
     getEvent(&event);

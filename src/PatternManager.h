@@ -65,10 +65,9 @@ class PatternManager {
   Pattern *TestIdlePattern() {
     static Pattern *testIdlePattern = NULL;
     if (testIdlePattern == NULL) {
-      // testIdlePattern = NULL;
       // testIdlePattern = new Oscillators();
       // testIdlePattern = new SpectrumAnalyzer();
-      // testIdlePattern = new Bars());
+      // testIdlePattern = new Bars();
       // testIdlePattern = new Droplets();
       // testIdlePattern = new PixelDust();
       // testIdlePattern = new SpikeSpin();

@@ -205,7 +205,7 @@ public:
     const float kHighEnergyThresh = 60;
     const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
     const float kTwirlThreshold = 1.8;
-    const float kTwirlFadeup = 0.7;
+    const float kTwirlFadeup = 0.5;
     
     motionManager.loop();
     float twirlVelocity = motionManager.twirlVelocity(30);
@@ -292,8 +292,9 @@ public:
         compositionState = singlePattern;
       } else if (activePattern && tempPattern) {
         float twirlFade = (fabsf(twirlVelocity) - kTwirlThreshold) / kTwirlFadeup;
-        tempPattern->setBrightness(min(0xFF, max(0, 0xFF * (twirlFade + 0.1))), true, 3);
-        activePattern->setBrightness(min(0xFF, max(0, 0xFF - 0xFF * (twirlFade + 0.8))), true, 4);
+        tempPattern->setBrightness(min(0xFF, max(0, 0xFF * (twirlFade + 0.1))), true, 5);
+        uint8_t ab = min(0xFF, max(0, 0xFF - 0xFF * (twirlFade + 0.3)));
+        activePattern->setBrightness(ab, true, 8);
       }
     }
   }

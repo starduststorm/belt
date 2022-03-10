@@ -21,12 +21,19 @@
 MotionManager motionManager;
 AudioManager audioManager;
 
+typedef enum {
+  patternFlagNone       = 0,
+  patternFlagHighEnergy = 1 << 0,
+  patternFlagTwirl      = 1 << 1,
+  patternFlagSound      = 1 << 2,
+} PatternFlags;
+
 class Composable {
 private:
-  uint8_t brightness = 0xFF;
   uint8_t targetBrightness = 0xFF;
   uint8_t animationSpeed = 1;
 public:
+  uint8_t brightness = 0xFF;
   virtual ~Composable() { }
   DrawingContext ctx;
   
@@ -57,6 +64,19 @@ private:
   long stopTime = -1;
   long lastUpdateTime = -1;
 public:
+  PatternFlags flags = patternFlagNone;
+  static PatternFlags patternFlags() {
+    return patternFlagNone;
+  }
+
+  template <class T>
+  static Pattern *makePattern() {
+    // workaround for lack of static polymorphism
+    Pattern *p = new T();
+    p->flags = T::patternFlags();
+    return p;
+  }
+
   virtual ~Pattern() { }
 
   void start() {
@@ -73,11 +93,6 @@ public:
   }
 
   virtual bool wantsToIdleStop() {
-    return true;
-  }
-
-  virtual bool wantsToRun() {
-    // for idle patterns that require microphone input and may opt not to run if there is no sound
     return true;
   }
 
@@ -348,203 +363,103 @@ public:
       audioManager.printStatistics();
     }
   }
-  
+
   const char *description() {
     return "SpectrumAnalyzer";
+  }
+  
+  static PatternFlags patternFlags() {
+    return patternFlagSound;
   }
 };
 
 /* ------------------------------------------------------------------------------------------------------ */
 
-class MotionBlobs : public Pattern, public PaletteRotation<CRGBPalette256>  {
-  static const bool kTestMode = false;
-public:
-  typedef enum { rect22, arrow, spikes } Shape;
-private:
-  /*--MotionBlob--*/
-  class MotionBlob {
-  public:
-    MotionBlobs *paletteRotation;
-    
-    int y;
-    int x;
-    Shape shape;
-
-    void reset(MotionBlobs *paletteRotation, int x, int y, Shape shape) {
-      this->paletteRotation = paletteRotation;
-      this->x = x;
-      this->y = y;
-      this->shape = shape;
-    }
-    
-    void update(DrawingContext ctx, float theta, float dtheta) {
-      ctx.pushStyle();
-      ctx.drawStyle.boundsBehavior = DrawStyle::wrap;
-
-      switch (shape) {
-        case rect22: {
-          float px = x + theta * TOTAL_WIDTH / 360;
-          CRGB color = paletteRotation->getPaletteColor(beatsin8(3));
-          ctx.point(px,  y,   color);
-          ctx.point(px+1, y,   color);
-          ctx.point(px,  y+1, color);
-          ctx.point(px+1, y+1, color);
-          break;
-        }
-        case arrow: {
-          float px = x + theta * TOTAL_WIDTH / 360;
-          float bend = 1.5*dtheta;
-
-          for (int y = 0; y < ctx.height; ++y) {
-            if (y < ctx.height/2) {
-              px += 1 * bend;
-            } else if (y > ctx.height/2) {
-              px -= 1 * bend;
-            }
-            float arrowstart = px - 2 * bend;
-
-            float yCenterDistanceFactor = (fabsf(ctx.height/2 - 0.5 - y) - 0.5) / (ctx.height/2 - 1);
-            
-            uint8_t paletteIndexTimeShift = beatsin16(1, 0, 2*0xFF);
-            uint8_t paletteIndexCircularShift = 0xFF * x / (float)TOTAL_WIDTH;
-            uint8_t paletteIndex = triwave8((uint8_t)(0x7F * yCenterDistanceFactor) + paletteIndexTimeShift + paletteIndexCircularShift);
-            CRGB color = paletteRotation->getPaletteColor(paletteIndex);
-            CRGB c1 = color;
-            CRGB c2 = color;
-
-            //  draw a second faded arrow
-            float iptr;
-            float frac = modff(arrowstart, &iptr);
-            c1 = c1.nscale8_video(max(1, (1 - frac) * 0xFF));
-            c2 = c2.nscale8_video(max(1, (frac * 0xFF)));
-            
-            // dim slightly at the top and bottom
-            float dimmingFactor = 0.5;
-            float heightDimmingAlpha = dimmingFactor * yCenterDistanceFactor;
-
-            c1 = c1.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
-            c2 = c2.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
-
-            ctx.point((int)iptr, (int)y, c1, blendBrighten); 
-            ctx.point((int)ceilf(arrowstart), (int)y, c2, blendBrighten);
-          }
-          break;
-        }
-        case spikes: {
-          // vertical bar while still, morphs in 2D to a horizontal bar, passing through larger shapes matched to rotation velocity
-          // while horizontal, forms a complete 2px thick line over entire belt that tracks 2 cycles of a palettes
-          
-          // 4 line segments, drawing a diamond of w,h
-          // 2 line segments, drawing a cross of w,h
-          // tune weights for how these parameters are matched to rotation velocity
-          // track vertical motion too?
-
-          float px = x + -2*theta * TOTAL_WIDTH / 360;
-          float bend = min(ctx.height/2-1, max(0.01, abs(2*-dtheta)));          
-          
-          CRGB color1, color2;
-          if (paletteRotation->colorMode == palette) {
-            color1 = paletteRotation->getPaletteColor(triwave8(0xFF * (x+bend+1)/PANEL_WIDTH)); // FIXME: needs to used mirrored palette
-            color2 = paletteRotation->getPaletteColor(triwave8(0xFF * (x-bend-1)/PANEL_WIDTH));
-          } else {
-            color1 = CHSV(0xFF * (x+bend+1)/PANEL_WIDTH, 0xFF, 0xFF);
-            color2 = CHSV(0xFF * (x-bend-1)/PANEL_WIDTH, 0xFF, 0xFF);
-          }
-
-          // diamond
-          ctx.line(px, bend, px+bend, ctx.height/2-1, color1, color2);
-          ctx.line(px, bend, px-bend, (int)ctx.height/2-1, color1, color2);
-          ctx.line(px, ctx.height-(int)bend-1, px+bend, ctx.height/2, color1, color2);
-          ctx.line(px, ctx.height-(int)bend-1, px-bend, ctx.height/2, color1, color2);
-
-          // cross
-          // FIXME: better fadeups e.g. proper antialiasing
-          ctx.line(px, bend, px, ctx.height-floorf(bend) - 1, color1.lerp8(color2, 0x7f), true);
-          ctx.line(px-bend-1, ctx.height/2 - 1, px+bend+1, ctx.height/2 - 1, color1, color2);
-          ctx.line(px-bend-1, ctx.height/2, px+bend+1, ctx.height/2, color1, color2);
-          break;
-        }
-      }
-      ctx.popStyle();
-    }
-  };
-  /*--End of MotionBlob--*/
-  
-public:
-  const int kBlobCount = 8;
-  const int kBlobsResetTimeout = 5000;
-  MotionBlob *blobs = NULL;
-  long lastDisplay = -kBlobsResetTimeout;
-  
+class MotionBlobs : public Pattern, public PaletteRotation<CRGBPalette32>  {
+  int blobCount;
+protected:
   typedef enum { palette, rainbow } ColorMode;
   ColorMode colorMode;
-
-  Shape mode;
-
-  MotionBlobs(Shape mode) : PaletteRotation(minBrightness=10) {
-    this->mode = mode;
-    blobs = new MotionBlob[kBlobCount];
+  int fadeDown = 60;
+public:
+  MotionBlobs(int blobCount) : PaletteRotation(minBrightness=10), blobCount(blobCount) {
     colorMode = random8(2) ? palette : rainbow;
     motionManager.subscribe();
-    this->minBrightness = 5;
   }
 
   ~MotionBlobs() {
     motionManager.unsubscribe();
-    delete [] blobs;
   }
 
-  void resetBlobs() {
-    // space out the blobs so they don't overlap
-    const int ybuckets = 2;
-    const int xbuckets = kBlobCount;
-
-    const int xbucketSize = ctx.width / xbuckets;
-    // const int ybucketSize = ctx.height / ybuckets;
-    
-    for (int i = 0; i < kBlobCount; ++i) {
-      int xbucketStart = (i * xbucketSize) % ctx.width;
-      // int ybucketStart = ybucketSize * ((i * xbucketSize) / ctx.width);
-
-      int x = xbucketStart;// + random8(xbucketSize);
-      int y = 0;//ybucketStart + random8(ybucketSize - 1);
-      
-      blobs[i].reset(this, x, y, mode);
-    }
-  }
+  virtual void draw(int x, float theta, float dtheta) = 0;
 
   void update() {
-    ctx.leds.fadeToBlackBy(kTestMode ? 60 : 60);
-
-    if (lastDisplay != -1 && millis() - lastDisplay > 5000) {
-      resetBlobs();
-      lastDisplay = -1;
-    }
+    ctx.leds.fadeToBlackBy(fadeDown);
 
     float orientation;
     float twirlVelocity = motionManager.twirlVelocity(10, &orientation);
-    if (kTestMode) {
-      twirlVelocity = beatsin8(20, 0, 0xFF)/63. - 2;
-      orientation = beatsin8(20, 0, 0xFF, 0, 195) - 127;
-    }
     ctx.pushStyle();
     ctx.blendMode(blendBrighten);
-    for (int i = 0; i < kBlobCount; ++i) {
-      MotionBlob *blob = &blobs[i];
-      blob->update(ctx, orientation, twirlVelocity);
+    ctx.drawStyle.boundsBehavior = DrawStyle::wrapX;
+    for (int i = 0; i < blobCount; ++i) {
+      const float xbucketSize = ctx.width / (float)blobCount;
+      int xbucketStart = round(mod_wrap(i * xbucketSize, ctx.width));
+      draw(xbucketStart, orientation, twirlVelocity);
     }
     ctx.popStyle();
-    lastDisplay = millis();
   }
   
   bool wantsToIdleStop() {
     return true;
   }
+
+  static PatternFlags patternFlags() {
+    return patternFlagTwirl;
+  }
 };
 
 class ArrowSpin : public MotionBlobs {
 public:
-  ArrowSpin() : MotionBlobs(MotionBlobs::arrow) {};
+  ArrowSpin() : MotionBlobs(8) {};
+  void draw(int x, float theta, float dtheta) {
+    float px = x + theta * TOTAL_WIDTH / 360;
+    float bend = 1.5*dtheta;
+
+    for (int y = 0; y < ctx.height; ++y) {
+      if (y < ctx.height/2) {
+        px += 1 * bend;
+      } else if (y > ctx.height/2) {
+        px -= 1 * bend;
+      }
+      float arrowstart = px - 2 * bend;
+
+      float yCenterDistanceFactor = (fabsf(ctx.height/2 - 0.5 - y) - 0.5) / (ctx.height/2 - 1);
+      
+      uint8_t paletteIndexTimeShift = beatsin16(1, 0, 2*0xFF);
+      uint8_t paletteIndexCircularShift = 0xFF * x / (float)TOTAL_WIDTH;
+      uint8_t paletteIndex = triwave8((uint8_t)(0x7F * yCenterDistanceFactor) + paletteIndexTimeShift + paletteIndexCircularShift);
+      CRGB color = getPaletteColor(paletteIndex);
+      CRGB c1 = color;
+      CRGB c2 = color;
+
+      //  draw a second faded arrow
+      float iptr;
+      float frac = modff(arrowstart, &iptr);
+      c1 = c1.nscale8_video(max(1, (1 - frac) * 0xFF));
+      c2 = c2.nscale8_video(max(1, (frac * 0xFF)));
+      
+      // dim slightly at the top and bottom
+      float dimmingFactor = 0.5;
+      float heightDimmingAlpha = dimmingFactor * yCenterDistanceFactor;
+
+      c1 = c1.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
+      c2 = c2.nscale8_video(0xFF - (uint8_t)min(0xFF, 0xFF * heightDimmingAlpha));
+
+      ctx.point((int)iptr, (int)y, c1, blendBrighten); 
+      ctx.point((int)ceilf(arrowstart), (int)y, c2, blendBrighten);
+    }
+  }
+
   const char *description() {
     return "ArrowSpin";
   }
@@ -552,11 +467,85 @@ public:
 
 class SpikeSpin : public MotionBlobs {
 public:
-  SpikeSpin() : MotionBlobs(MotionBlobs::spikes) {};
+  SpikeSpin() : MotionBlobs(8) {
+    flags = patternFlagNone; // needs polish
+  }
+  void draw(int x, float theta, float dtheta) {
+    // vertical bar while still, morphs in 2D to a horizontal bar, passing through larger shapes matched to rotation velocity
+    // while horizontal, forms a complete 2px thick line over entire belt that tracks 2 cycles of a palettes
+    
+    // 4 line segments, drawing a diamond of w,h
+    // 2 line segments, drawing a cross of w,h
+    // tune weights for how these parameters are matched to rotation velocity
+    // track vertical motion too?
+
+    float px = x + -theta * TOTAL_WIDTH / 180;
+    float bend = min(ctx.height/2-1, max(0.01, abs(2*-dtheta))); 
+    
+    CRGB color1, color2;
+    if (colorMode == palette) {
+      color1 = getPaletteColor(triwave8(0xFF * (x+bend+1)/PANEL_WIDTH)); // FIXME: needs to used mirrored palette
+      color2 = getPaletteColor(triwave8(0xFF * (x-bend-1)/PANEL_WIDTH));
+    } else {
+      color1 = CHSV(0xFF * (x+bend+1)/PANEL_WIDTH, 0xFF, 0xFF);
+      color2 = CHSV(0xFF * (x-bend-1)/PANEL_WIDTH, 0xFF, 0xFF);
+    }
+
+    // diamond
+    ctx.line(px, bend, px+bend, ctx.height/2-1, color1, color2);
+    ctx.line(px, bend, px-bend, (int)ctx.height/2-1, color1, color2);
+    ctx.line(px, ctx.height-(int)bend-1, px+bend, ctx.height/2, color1, color2);
+    ctx.line(px, ctx.height-(int)bend-1, px-bend, ctx.height/2, color1, color2);
+
+    // cross
+    ctx.line(px, bend, px, ctx.height-floorf(bend) - 1, color1.lerp8(color2, 0x7f), true);
+    ctx.line(px-bend-1, ctx.height/2 - 1, px+bend+1, ctx.height/2 - 1, color1, color2);
+    ctx.line(px-bend-1, ctx.height/2, px+bend+1, ctx.height/2, color1, color2);
+  }
+
   const char *description() {
     return "SpikeSpin";
   }
 };
+
+class TriangleSpin : public MotionBlobs {
+public:
+  TriangleSpin() : MotionBlobs(6) {
+    fadeDown = 0xFF;
+  };
+  void draw(int x, float theta, float dtheta) {
+    float px = x - theta * TOTAL_WIDTH / 360;
+    float thetarad = theta * M_PI/180;
+
+    float r = 2+fabsf(dtheta);
+
+    float midY = TOTAL_HEIGHT/2-0.5;
+    // heading is leaning forward and back, -180, 180
+    // pitch is leaning left and right -90,90?
+    // roll is twirl 0,360
+    // logf("heading, pitch, roll: (%0.2f, %0.2f, %0.2f)", event.gyro.heading, event.gyro.pitch, event.gyro.roll);
+
+    CRGB c1 = getPaletteColor(millis() / 100 + 0   + 2*px + r*px);
+    CRGB c2 = getPaletteColor(millis() / 100 + 85  + 2*px + r*px);
+    CRGB c3 = getPaletteColor(millis() / 100 + 170 + 2*px + r*px);
+
+    float x1 = px + r*sinf(thetarad + 0);
+    float x2 = px + r*sinf(thetarad + 2*M_PI/3);
+    float x3 = px + r*sinf(thetarad + 4*M_PI/3);
+    float y1 = midY + r*cosf(thetarad + 0);
+    float y2 = midY + r*cosf(thetarad + 2*M_PI/3);
+    float y3 = midY + r*cosf(thetarad + 4*M_PI/3);
+
+    ctx.line(x1,y1,x2,y2,c1,c2);
+    ctx.line(x2,y2,x3,y3,c2,c3);
+    ctx.line(x3,y3,x1,y1,c3,c1);
+  }
+
+  const char *description() {
+    return "TriangleSpin";
+  }
+};
+
 
 /* ------------------------------------------------------------------------------------------------------ */
 
@@ -770,6 +759,10 @@ public:
   const char *description() {
     return "Bars";
   }
+
+  static PatternFlags patternFlags() {
+    return patternFlagTwirl;
+  }
 };
 
 /* ------------------------------------------------------------------------------------------------------ */
@@ -848,6 +841,10 @@ public:
   }
   const char *description() {
     return "Oscillators";
+  }
+
+  static PatternFlags patternFlags() {
+    return patternFlagSound;
   }
 };
 
@@ -993,6 +990,10 @@ public:
 
   const char *description() {
     return "PixelDust";
+  }
+
+  static PatternFlags patternFlags() {
+    return patternFlagHighEnergy;
   }
 };
 
@@ -1151,71 +1152,11 @@ public:
   const char *description() {
     return "Droplets";
   }
-};
-
-/* ------------------------------------------------------------------------------------------------------ */
-
-class Triangles : public Pattern, public PaletteRotation<CRGBPalette16> {//, public FFTProcessing {
-public:
-  Triangles() {// : FFTProcessing(&audioManager, 10) {
-    ctx.drawStyle.boundsBehavior = DrawStyle::wrapX;
-    ctx.drawStyle.blendMode = blendBrighten;
-  }
-  ~Triangles() {
-    motionManager.unsubscribe();
-  }
-
-  void setup() {
-    motionManager.subscribe();
-    pauseRotation = false;
-  }
-
-  float theta = 0;
-  void update() {
-    ctx.leds.fill_solid(CRGB::Black);
-    // ctx.leds.fadeToBlackBy(1);
-
-    int count = 6;
-    // float r = beatsin8(10, 40, 120) / 20.;
-    float r = 2+fabsf(motionManager.twirlVelocity(10));
-    
-    
-    sensors_event_t event;
-    motionManager.getEvent(&event);
-    float xbase = -event.orientation.x * 64 / 360;
-    // float xbase = beatsin8(6, 0, 64) / 4.;
-
-    float midY = TOTAL_HEIGHT/2-0.5;
-    // heading is leaning forward and back, -180, 180
-    // pitch is leaning left and right -90,90?
-    // roll is twirl 0,360
-    // logf("heading, pitch, roll: (%0.2f, %0.2f, %0.2f)", event.gyro.heading, event.gyro.pitch, event.gyro.roll);
-
-    for (int i = 0 ; i < count; ++i) {
-      CRGB c1 = getPaletteColor(millis() / 100 + 0   + 12*i + 5*r*i);
-      CRGB c2 = getPaletteColor(millis() / 100 + 85  + 12*i + 5*r*i);
-      CRGB c3 = getPaletteColor(millis() / 100 + 170 + 12*i + 5*r*i);
-
-      float x1 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 0);
-      float x2 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 2*M_PI/3);
-      float x3 = xbase + i * TOTAL_WIDTH/count + r*sinf(theta + 4*M_PI/3);
-      float y1 = midY + r*cosf(theta + 0);
-      float y2 = midY + r*cosf(theta + 2*M_PI/3);
-      float y3 = midY + r*cosf(theta + 4*M_PI/3);
-
-      ctx.line(x1,y1,x2,y2,c1, c2);
-      ctx.line(x2,y2,x3,y3,c2, c3);
-      ctx.line(x3,y3,x1,y1,c3, c1);
-    }
-    // theta += 0.05;
-    theta -= motionManager.twirlVelocity(10) / 10.;
-  }
-
-  const char *description() {
-    return "Triangles";
+  
+  static PatternFlags patternFlags() {
+    return patternFlagSound;
   }
 };
-
 
 /* ------------------------------------------------------------------------------------------------------ */
 

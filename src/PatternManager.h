@@ -16,9 +16,29 @@ struct Overlay {
   OverlayTick tick;
 };
 
+// store a list of "classes" so we can call query static methods in a generic way
+class PatternIntrospector {
+  template<class T>
+  static Pattern *makeConstructor() {
+    return Pattern::makePattern<T>();
+  }
+public:
+  PatternFlags flags;
+  Pattern * (*construct)(void);
+
+  template<class T>
+  static PatternIntrospector Introspect() {
+    PatternFlags flags = T::patternFlags();
+    Pattern * (*construct)(void) = &(makeConstructor<T>);
+    return PatternIntrospector(flags, construct);
+  }
+
+  PatternIntrospector(PatternFlags flags, Pattern * (*construct)(void)) : flags(flags), construct(construct) { };
+};
+
 template <typename BufferType>
 class PatternManager {
-  std::vector<Pattern * (*)(void)> patternConstructors;
+  std::vector<PatternIntrospector> allPatterns;
 
   int activePatternIndex = -1;
   Pattern *activePattern = NULL;  // main pattern
@@ -28,7 +48,7 @@ class PatternManager {
 
   bool automaticMode = false;
 
-  enum { singlePattern, energyCrossfade } compositionState = singlePattern;
+  enum { singlePattern, energyCrossfade, twirlOverlay } compositionState = singlePattern;
   int autoSwitchLastPatternIndex = -1;
   int autoSwitchAccumulator = 0;
   
@@ -59,26 +79,42 @@ class PatternManager {
     return testIdlePattern;
   }
 
-    // "constants"
-  int initialPatternIndex = 0;
-  int highMotionPatternIndex = 0;
-
 public:
   BufferType &ctx;
 
   PatternManager(BufferType &ctx) : ctx(ctx) {
-    patternConstructors.push_back(&(construct<Compass>));
-    patternConstructors.push_back(&(construct<Bars>));
-    patternConstructors.push_back(&(construct<Triangles>));
-    patternConstructors.push_back(&(construct<SpikeSpin>));
-    patternConstructors.push_back(&(construct<ArrowSpin>)); initialPatternIndex = patternConstructors.size()-1;
-    patternConstructors.push_back(&(construct<PixelDust>)); highMotionPatternIndex = patternConstructors.size()-1;
-    patternConstructors.push_back(&(construct<Droplets>));
-    patternConstructors.push_back(&(construct<Oscillators>));
-    patternConstructors.push_back(&(construct<SpectrumAnalyzer>));
-    patternConstructors.push_back(&(construct<SmoothPalettes>));
-    
-    // patternConstructors.push_back(&(PatternManager::construct<Bits>));
+    allPatterns.push_back(PatternIntrospector::Introspect<ArrowSpin>()); // initial pattern by virtue of being index 0
+    allPatterns.push_back(PatternIntrospector::Introspect<PixelDust>());
+    allPatterns.push_back(PatternIntrospector::Introspect<Droplets>());
+    allPatterns.push_back(PatternIntrospector::Introspect<Oscillators>());
+    allPatterns.push_back(PatternIntrospector::Introspect<SpectrumAnalyzer>());
+    allPatterns.push_back(PatternIntrospector::Introspect<SmoothPalettes>());
+    allPatterns.push_back(PatternIntrospector::Introspect<Compass>());
+    allPatterns.push_back(PatternIntrospector::Introspect<Bars>());
+    allPatterns.push_back(PatternIntrospector::Introspect<TriangleSpin>());
+    allPatterns.push_back(PatternIntrospector::Introspect<SpikeSpin>());
+  }
+
+  std::vector<PatternIntrospector> patternsMatchingFlags(PatternFlags flags) {
+    std::vector<PatternIntrospector> matching;
+    for (auto pattern : allPatterns) {
+      if ((pattern.flags & flags) == flags) {
+        matching.push_back(pattern);
+      }
+    }
+    return matching;
+  }
+
+  int indexOfRandomPatternMatchingFlags(PatternFlags flags) {
+    std::vector<std::pair<PatternIntrospector, int> > matching;
+    for (unsigned i = 0; i < allPatterns.size(); ++i) {
+      auto pattern = allPatterns[i];
+      if ((pattern.flags & flags) == flags) {
+        matching.push_back(std::pair<PatternIntrospector, int>(pattern, i));
+      }
+    }
+    auto choice = matching[random8(matching.size())];
+    return choice.second;
   }
 
   void RunOverlay(unsigned long durationMillis, OverlayTick tick) {
@@ -97,32 +133,29 @@ public:
     if (testPattern) {
       setActivePattern(testPattern, -1);
     } else {
-      startPatternAtIndex(initialPatternIndex);
+      startPatternAtIndex(0);
     }
   }
 
   void nextPattern() {
     if (automaticMode) toggleAutoPattern();
 
-    activePatternIndex = (activePatternIndex + 1) % patternConstructors.size();
-    if (!startPatternAtIndex(activePatternIndex)) {
-      nextPattern();
-    }
+    activePatternIndex = (activePatternIndex + 1) % allPatterns.size();
+    startPatternAtIndex(activePatternIndex);
   }
 
   void previousPattern() {
     if (automaticMode) toggleAutoPattern();
 
-    activePatternIndex = mod_wrap(activePatternIndex - 1, patternConstructors.size());
-    if (!startPatternAtIndex(activePatternIndex)) {
-      nextPattern();
-    }
+    activePatternIndex = mod_wrap(activePatternIndex - 1, allPatterns.size());
+    startPatternAtIndex(activePatternIndex);
   }
 
   // TODO: change the button action to always just "enable" and show a more intresting modal instead of this boring overlay. main.cpp can run the Modal when the button is pressed only.
   void toggleAutoPattern(bool runOverlay=false) {
     automaticMode = !automaticMode;
     if (!automaticMode) {
+      compositionState = singlePattern;
       autoSwitchLastPatternIndex = -1;
     }
     logf("Pattern Automatic -> %s", (automaticMode ? "ON" : "OFF"));
@@ -138,25 +171,16 @@ public:
   }
 
   inline Pattern *createPatternAtIndex(int index) {
-    auto ctor = patternConstructors[index];
-    return ctor();
+    return allPatterns[index].construct();
   }
 
-  bool startPatternAtIndex(int index) {
+  void startPatternAtIndex(int index) {
     Pattern *nextPattern = createPatternAtIndex(index);
-    if (setActivePattern(nextPattern, index)) {
-      return true;
-    }
-    delete nextPattern; // patternConstructors returns retained
-    return false;
+    setActivePattern(nextPattern, index);
   }
 
-  bool setActivePattern(Pattern *pattern, int index) {
-    if (tempPattern) {
-      tempPattern->stop();
-      delete tempPattern;
-      tempPattern = NULL;
-    }
+  void setActivePattern(Pattern *pattern, int index) {
+    stopTempPattern();
 
     if (activePattern) {
       activePattern->stop();
@@ -164,31 +188,26 @@ public:
       activePattern = NULL;
     }
 
-    if (pattern->wantsToRun()) {
-      pattern->start();
-      activePattern = pattern;
-      activePatternIndex = index;
-      return true;
-    } else {
-      return false;
-    }
+    pattern->start();
+    activePattern = pattern;
+    activePatternIndex = index;
   }
 
-  void startTempPatternAtIndex(int index) {
+  void stopTempPattern() {
     if (tempPattern) {
       tempPattern->stop();
       delete tempPattern;
       tempPattern = NULL;
     }
-    
+    tempPatternIndex = -1;
+  }
+
+  void startTempPatternAtIndex(int index) {
+    stopTempPattern();
     Pattern *pattern = createPatternAtIndex(index);
-    if (pattern && pattern->wantsToRun()) {
-      pattern->start();
-      tempPattern = pattern;
-      tempPatternIndex = index;
-    } else if (pattern) {
-      delete pattern;
-    }
+    pattern->start();
+    tempPattern = pattern;
+    tempPatternIndex = index;
   }
 
   void handleAutomaticPatternMode() {
@@ -197,10 +216,13 @@ public:
     const float kLowEnergyThresh = 10;
     const float kHighEnergyThresh = 60;
     const float kAutoCrossfadeFrameRequirement = 300; // hacky method for progressively crossfading to the high energy pattern by counting the frames with energy above or below threshold
+    const float kTwirlThreshold = 1.8;
+    const float kTwirlFadeup = 0.7;
     
     motionManager.loop();
 #if !kTestAutomaticModeEnergyChange
     float bouncyEnergy = motionManager.bouncyEnergy();
+    float twirlVelocity = motionManager.twirlVelocity(30);
 #else
     float bouncyEnergy = beatsin8(1, 0, 70);
     EVERY_N_MILLIS(500) {
@@ -208,53 +230,37 @@ public:
     }
 #endif
 
-    // EVERY_N_MILLIS(1000) {
-    //   logf("bouncyEnergy = %f, autoSwitchAccumulator = %i", bouncyEnergy, autoSwitchAccumulator);
-    // }
-    if (activePatternIndex != highMotionPatternIndex) {
-      if (bouncyEnergy > kHighEnergyThresh) {
-        if (!tempPattern) {
-          logf("long sustained motion, starting dust");
-          startTempPatternAtIndex(highMotionPatternIndex);
-          autoSwitchAccumulator = 0;
-          compositionState = energyCrossfade;
-        }
-        if (compositionState == energyCrossfade) {
-          autoSwitchAccumulator++;
-        }
-      } else if (compositionState == energyCrossfade) {
-        autoSwitchAccumulator--;
-      }
-    } else if (autoSwitchLastPatternIndex != -1) {
-      if (bouncyEnergy < kLowEnergyThresh) {
-        if (!tempPattern) {
-          logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
-          startTempPatternAtIndex(autoSwitchLastPatternIndex);
-          autoSwitchAccumulator = 0;
-          compositionState = energyCrossfade;
-        }
-        if (compositionState == energyCrossfade) {
-          autoSwitchAccumulator++;
-        }
-      } else if (compositionState == energyCrossfade) {
-        autoSwitchAccumulator--;
+    if (compositionState == singlePattern) {
+      if (activePattern && !(activePattern->flags & patternFlagHighEnergy) && bouncyEnergy > kHighEnergyThresh) {
+        logf("long sustained motion, starting dust");
+        // pick a high energy pattern at random
+        int choice = indexOfRandomPatternMatchingFlags(patternFlagHighEnergy);
+        startTempPatternAtIndex(choice);
+        autoSwitchAccumulator = 0;
+        compositionState = energyCrossfade;
+      } else if (autoSwitchLastPatternIndex != -1 && bouncyEnergy < kLowEnergyThresh) {
+        logf("long sustained low motion, reverting to last pattern %i", autoSwitchLastPatternIndex);
+        startTempPatternAtIndex(autoSwitchLastPatternIndex);
+        autoSwitchAccumulator = 0;
+        compositionState = energyCrossfade;
       }
     }
-
     if (compositionState == energyCrossfade) {
+      if (autoSwitchLastPatternIndex != -1) {
+        autoSwitchAccumulator += (bouncyEnergy < kHighEnergyThresh ? 1 : -1);
+      } else {
+        autoSwitchAccumulator += (bouncyEnergy > kHighEnergyThresh ? 1 : -1);
+      }
+
       if (autoSwitchAccumulator < -90) {
         logf("autoswitch crossfade cancel");
-        if (tempPattern) {
-          tempPattern->stop();
-          delete tempPattern;
-          tempPattern = NULL;
-        }
+        stopTempPattern();
         autoSwitchAccumulator = 0;
         compositionState = singlePattern;
       } else if (autoSwitchAccumulator > kAutoCrossfadeFrameRequirement) {
         logf("autoswitch crossfade finished");
         if (activePattern && tempPattern) {
-          autoSwitchLastPatternIndex = activePatternIndex;
+          autoSwitchLastPatternIndex = (autoSwitchLastPatternIndex == -1 ? activePatternIndex : -1);
           activePattern->stop();
           delete activePattern;
           activePattern = tempPattern;
@@ -274,6 +280,33 @@ public:
         }
       }
     }
+
+    if (compositionState == singlePattern && activePattern && !(activePattern->flags & patternFlagTwirl)) {
+      if (fabsf(twirlVelocity) > kTwirlThreshold) {
+        // choose a twirl pattern at random
+        // TODO: can this sort of slowly alternate between choices instead?
+        int choice = indexOfRandomPatternMatchingFlags(patternFlagTwirl);
+        startTempPatternAtIndex(choice);
+        if (tempPattern) {
+          tempPattern->setBrightness(0);
+        }
+        compositionState = twirlOverlay;
+      }
+    }
+    if (compositionState == twirlOverlay) {
+      if (fabsf(twirlVelocity) < 0.8 * kTwirlThreshold && tempPattern->brightness == 0) {
+        // stop twirl
+        stopTempPattern();
+        if (activePattern) {
+          activePattern->setBrightness(0xFF, true);
+        }
+        compositionState = singlePattern;
+      } else if (activePattern && tempPattern) {
+        float twirlFade = (fabsf(twirlVelocity) - kTwirlThreshold) / kTwirlFadeup;
+        tempPattern->setBrightness(min(0xFF, max(0, 0xFF * (twirlFade + 0.1))), true, 3);
+        activePattern->setBrightness(min(0xFF, max(0, 0xFF - 0xFF * (twirlFade + 0.8))), true, 4);
+      }
+    }
   }
 
   void loop() {
@@ -287,7 +320,6 @@ public:
     if (activePattern) {
       activePattern->loop();
       activePattern->composeIntoContext(ctx);
-      
     }
     if (tempPattern) {
       tempPattern->loop();
@@ -322,7 +354,7 @@ public:
 
     // start a new random pattern if there is none
     if (activePattern == NULL) {
-      int choice = (int)random8(patternConstructors.size());
+      int choice = (int)random8(allPatterns.size());
       startPatternAtIndex(choice);
     }
   }

@@ -209,7 +209,7 @@ public:
     
     // main loop
     if (steep) {
-      assert(xpxl1 < xpxl2, "xpxl1 < xpxl2");
+      assert(xpxl1 <= xpxl2, "xpxl1 <= xpxl2");
       for (float x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
         PixelType c = src0.lerp8(src1, 0xFF * (uint8_t)(x-(xpxl1 + 1)) / (uint8_t)(xpxl2 - 1-(xpxl1 + 1)));
         point(floorf(intery)  , x, c, rfpart(intery));
@@ -217,7 +217,7 @@ public:
         intery = intery + gradient;
       }
     } else {
-      assert(xpxl1 < xpxl2, "xpxl1 < xpxl2");
+      assert(xpxl1 <= xpxl2, "xpxl1 <= xpxl2");
         for (float x = xpxl1 + 1; x <= xpxl2 - 1; ++x) {
           PixelType c = src0.lerp8(src1, 0xFF * (uint8_t)(x-(xpxl1 + 1)) / (uint8_t)(xpxl2 - 1-(xpxl1 + 1)));
           point(x, floorf(intery),   c, rfpart(intery));

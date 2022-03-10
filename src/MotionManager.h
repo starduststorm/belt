@@ -6,6 +6,8 @@
 #include <vector>
 #include "stats.h"
 
+#define kTestTwirlVelocity false
+
 typedef enum : unsigned int {
   JumpActivity,
   ActivityTypeCount,
@@ -139,16 +141,22 @@ private:
   float twirlVelocityAccum;
   float prevXOrientation;
 public:
-  float twirlVelocity(int samples, float *outOrientation=NULL) {
+  float twirlVelocity(int samples=10, float *outOrientation=NULL) {
+    float orientation;
+
+#if kTestTwirlVelocity
+    orientation = (beatsin16(20, 0, 1000) - 500) / 2;
+#else
     sensors_event_t event;
     getEvent(&event);
+    orientation = event.orientation.x;
+#endif
+    twirlVelocityAccum = (samples * twirlVelocityAccum + MOD_DISTANCE(prevXOrientation, orientation, 360)) / (samples + 1);
+    prevXOrientation = orientation;
 
-    float orientation = event.orientation.x;
     if (outOrientation) {
       *outOrientation = orientation;
     }
-    twirlVelocityAccum = (samples * twirlVelocityAccum + MOD_DISTANCE(prevXOrientation, orientation, 360)) / (samples + 1);
-    prevXOrientation = orientation;
 
     return twirlVelocityAccum;
   }

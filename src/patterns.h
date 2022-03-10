@@ -952,14 +952,15 @@ public:
       for (unsigned n = 0; n < numParticles; ++n) {
         dimension_t x,y;
         pixelDust[0]->getPosition(n, &x, &y);
-        if (x > PANEL_WIDTH/2) {
-          zbalance++;
+        if (x < PANEL_WIDTH) {
+          // right panel
+          zbalance += (x > PANEL_WIDTH/2 ? 1 : -1);
         } else {
-          zbalance--;
+          // left panel
+          zbalance += (x > 3*PANEL_WIDTH/2 ? 1 : -1);
         }
       }
-      zcorrect[p] = 2.0 * zbalance / numParticles;
-      // logf("zbalance %s = %i, zcorrect = %f", p==0?"right":"left", zbalance, zcorrect[p]);
+      zcorrect[p] = 6.0 * zbalance / numParticles;
     }
 
     // logf("ACCEL (%0.2f, %0.2f, %0.2f), LINACCEL (%0.2f, %0.2f, %0.2f)", accel.acceleration.x,accel.acceleration.y,accel.acceleration.z,

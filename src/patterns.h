@@ -21,12 +21,13 @@
 MotionManager motionManager;
 AudioManager audioManager;
 
-typedef enum {
+enum : uint16_t {
   patternFlagNone       = 0,
   patternFlagHighEnergy = 1 << 0,
   patternFlagTwirl      = 1 << 1,
   patternFlagSound      = 1 << 2,
-} PatternFlags;
+};
+typedef uint16_t PatternFlags;
 
 class Composable {
 private:
@@ -769,7 +770,9 @@ public:
 /* ------------------------------------------------------------------------------------------------------ */
 
 class Oscillators : public Pattern, public PaletteRotation<CRGBPalette16>, public FFTProcessing {
-  static const int fftBins = 5;
+  static const int fftBins = 6;
+  static const int fftBinOffset = 1;
+  static const int fftUsableBins = fftBins - fftBinOffset;
   float offset = 0;
   uint8_t mode;
   float fftHistory[fftBins][PANEL_HEIGHT];
@@ -806,20 +809,20 @@ public:
     const float *levels = fftLevels(5);
 
     EVERY_N_MILLIS(32) {
-      for (int i = 0; i < fftBins; ++i) {
+      for (int i = fftBinOffset; i < fftBins; ++i) {
         for (int y = PANEL_HEIGHT - 1; y > 0; --y) {
           fftHistory[i][y] = fftHistory[i][y-1];
         }
       }
     }
-    for (int i = 0; i < fftBins; ++i) {
+    for (int i = fftBinOffset; i < fftBins; ++i) {
       fftHistory[i][0] = levels[i];
     }
     for (int x = 0; x < ctx.width; ++x) {
       for (int y = 0; y < ctx.height; ++y) {
         int phase = 10 * offset + x*39 + 4*offset*y;
-        float bucket = fmod_wrap((phase+64) / 255., fftBins);
-        uint8_t colorIndex = 255./fftBins * (int)bucket;
+        float bucket = fmod_wrap((phase+64) / 255., fftUsableBins);
+        uint8_t colorIndex = 255./fftUsableBins * (int)bucket;
         CRGB color;
         switch (mode) {
           case 1:
@@ -831,7 +834,7 @@ public:
            color = getPaletteColor(addmod8(colorIndex, 51, 0xFF)); break;
         }
         
-        color.nscale8_video(min(0xFF, scale8(dim8_video(sin8(phase)), fftHistory[(int)bucket % fftBins][y] * 1 * 0xFF)));
+        color.nscale8_video(min(0xFF, scale8(dim8_video(sin8(phase)), fftHistory[(int)bucket % fftUsableBins + fftBinOffset][y] * 1 * 0xFF)));
         if (color.r + color.g + color.b < 3) {
           color = CRGB::Black;
         }
@@ -845,7 +848,7 @@ public:
   }
 
   static PatternFlags patternFlags() {
-    return patternFlagSound;
+    return patternFlagSound | patternFlagTwirl;
   }
 };
 

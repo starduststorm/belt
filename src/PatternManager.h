@@ -220,9 +220,10 @@ public:
     const float kTwirlFadeup = 0.7;
     
     motionManager.loop();
+    float twirlVelocity = motionManager.twirlVelocity(30);
+
 #if !kTestAutomaticModeEnergyChange
     float bouncyEnergy = motionManager.bouncyEnergy();
-    float twirlVelocity = motionManager.twirlVelocity(30);
 #else
     float bouncyEnergy = beatsin8(1, 0, 70);
     EVERY_N_MILLIS(500) {

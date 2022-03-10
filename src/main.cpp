@@ -52,6 +52,8 @@ void applyBrightnessSettings();
 #define THUMBDIAL2_PIN A2
 #define BUTTON_PIN 0
 
+static unsigned long fadeInStart = 0;
+
 void DrawModal(int fps, unsigned long durationMillis, std::function<void(float progress)> tick) {
   int delayMillis = 1000/fps;
   unsigned long start = millis();
@@ -77,6 +79,7 @@ void buttonDoublePress() {
 }
 
 void buttonLongPress() {
+  // Automatic mode welcome
   DrawModal(90, 150, [](float progress) {
     ctx.leds.fadeToBlackBy(20);
   });
@@ -103,6 +106,7 @@ void buttonLongPress() {
   });
   ctx.leds.fill_solid(CRGB::Black);
   patternManager.enableAutomaticMode();
+  fadeInStart = millis();
 }
 
 void buttonDoubleLongPress() {
@@ -166,6 +170,7 @@ void setup() {
   controls.update();
 
   setupDoneTime = millis();
+  fadeInStart = setupDoneTime;
 }
 
 void serialTimeoutIndicator() {
@@ -206,18 +211,18 @@ void loop() {
 }
 
 void applyBrightnessSettings() {
-  static long firstLoopMillis = 0;
   const long fadeInTime = 2000;
-  if (firstLoopMillis == 0) {
-    firstLoopMillis = millis();
-  }
 
-  long earlyRunTime = firstLoopMillis + fadeInTime - millis();
-  uint8_t earlyDimming = 0xFF;
-  if (earlyRunTime > 0) {
-    earlyDimming = 0xFF - 0xFF * earlyRunTime / (float)fadeInTime;
+  uint8_t fadeInDimming = 0xFF;
+  if (fadeInStart != 0) {
+    long earlyRunTime = fadeInStart + fadeInTime - millis();
+    if (earlyRunTime > 0) {
+      fadeInDimming = 0xFF - 0xFF * earlyRunTime / (float)fadeInTime;
+    }
+    if (millis() - fadeInStart > fadeInTime) {
+      fadeInStart = 0;
+    }
   }
-  uint8_t totalBrightness = scale8(globalBrightness, earlyDimming);
+  uint8_t totalBrightness = scale8(globalBrightness, fadeInDimming);
   LEDS.setBrightness(totalBrightness);
-  // leds.fadeLightBy(0xFF - totalBrightness);
 }

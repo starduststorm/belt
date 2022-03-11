@@ -692,8 +692,9 @@ public:
   uint8_t maxColorJump = 0xFF;
   bool pauseRotation = false;
   
-  PaletteRotation(int minBrightness=0) {
+  PaletteRotation(uint8_t  minBrightness=0, uint8_t maxColorJump=0xFF) {
     this->minBrightness = minBrightness;
+    this->maxColorJump = maxColorJump;
     assignPalette(&currentPalette);
     assignPalette(&targetPalette);
   }

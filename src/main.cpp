@@ -11,14 +11,9 @@
 
 #include <FastLED.h>
 
-#define PANEL_WIDTH 32
-#define PANEL_HEIGHT 8
-#define PANEL_COUNT 2
-#define TOTAL_WIDTH (PANEL_COUNT * PANEL_WIDTH)
-#define TOTAL_HEIGHT PANEL_HEIGHT
+#include "config.h"
 
-#define PANEL_LEDS (PANEL_WIDTH * PANEL_HEIGHT)
-#define NUM_LEDS (PANEL_LEDS * PANEL_COUNT)
+#define PANEL_COUNT 2 // would require substantial changes to support anything besides 2
 
 #include "util.h"
 #include "PatternManager.h"

@@ -618,18 +618,25 @@ public:
   }
 };
 
-class Compass : public Pattern, public PaletteRotation<CRGBPalette32> {
-  Glyph *cardinals[4];
-
-  static const int frontGap = 4;
-  static const int panelLength = 32; // yay about 1cm per pixel
-  static const int backGap = 26;
-  static const int circumference = frontGap + 2*panelLength + backGap;
-  const int panelStartX[2] = {2, frontGap/2 + panelLength + backGap}; // measuring from front center
-  
+class WrappedBufferPattern : public Pattern {
+public:
   // we'll create a buffer the full size of the belt to draw 360º compass to, and then copy the parts that "overlap" onto the panels
-  CustomDrawingContext< circumference, TOTAL_HEIGHT, CRGB, CRGBArray<circumference * TOTAL_HEIGHT> > circleBuffer;
+  CustomDrawingContext< kPanelGeometry.circumference, TOTAL_HEIGHT, CRGB, CRGBArray<kPanelGeometry.circumference * TOTAL_HEIGHT> > circleBuffer;
 
+  virtual void update() {
+    // copy the circular buffer onto the panels
+    for (int p = 0; p < PANEL_COUNT; ++p) {
+      for (int y = 0; y < PANEL_HEIGHT; ++y) {
+        for (int x = 0; x < PANEL_WIDTH; ++x) {
+          ctx.ledat(x + p * PANEL_WIDTH,y) = circleBuffer.ledat(x + kPanelGeometry.panelStartX[p], y);
+        }
+      }
+    }
+  }
+};
+
+class Compass : public WrappedBufferPattern, public PaletteRotation<CRGBPalette32> {
+  Glyph *cardinals[4];
 public:
   Compass() : PaletteRotation(minBrightness=10) {
     std::map<char,CRGB> colormap;
@@ -671,14 +678,7 @@ public:
       
       circleBuffer.shift_buffer(-xOffset,0);
 
-      // now copy the larger buffer onto the panels
-      for (int p = 0; p < PANEL_COUNT; ++p) {
-        for (int y = 0; y < PANEL_HEIGHT; ++y) {
-          for (int x = 0; x < PANEL_WIDTH; ++x) {
-            ctx.ledat(x + p * PANEL_WIDTH,y) = circleBuffer.ledat(x + panelStartX[p], y);
-          }
-        }
-      }
+      WrappedBufferPattern::update();
     }
   }
 
@@ -942,9 +942,10 @@ public:
     motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
     float jerkFactor = 2.0;
 
-    // Z through board (right-side-up positive)
-    // X vertical with text
-    // Y horizontal along board
+    // while standing upright:
+    // Z axis from front to back of belt, forward and back tilt
+    // X axis vertical head to toe, jumping & bouncing
+    // Y axis left to right, leaning side to side
 
     // apply a small correction factor to Z to account for the board not sitting perfectly vertical on the belt/my back, pixels tend to get stuck towards the back
 

@@ -73,7 +73,7 @@ class PatternManager {
       // testIdlePattern = new SpikeSpin();
       // testIdlePattern = new ArrowSpin();
       // testIdlePattern = new Compass();
-      // testIdlePattern = new Triangles();
+      // testIdlePattern = new TriangleSpin();
     }
     return testIdlePattern;
   }

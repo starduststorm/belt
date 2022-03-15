@@ -56,11 +56,6 @@ class PatternManager {
   std::vector<Overlay> overlays;
   unsigned long lastOverlayActive = 0;
 
-  template<class T>
-  static Pattern *construct() {
-    return new T();
-  }
-
   // Make testIdlePattern in this constructor instead of at global so the Pattern doesn't get made at launch
   Pattern *TestIdlePattern() {
     static Pattern *testIdlePattern = NULL;
@@ -206,7 +201,6 @@ public:
     const float kTwirlThreshold = 1.8;
     const float kTwirlFadeup = 0.5;
     
-    motionManager.loop();
     float twirlVelocity = motionManager.twirlVelocity(30);
 
 #if !kTestAutomaticModeEnergyChange
@@ -300,8 +294,8 @@ public:
 
   void loop() {
     ctx.leds.fill_solid(CRGB::Black);
+    motionManager.loop();
     
-    // TODO: automatic mode being on at all is current dropping us about 6fps from 78 down to 72, where's all that time going?
     if (automaticMode) {
       handleAutomaticPatternMode();
     }

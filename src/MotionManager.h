@@ -21,7 +21,15 @@ private:
   unsigned int retainCount;
   std::vector<ActivityHandlerMap> activityHandlers;
   RunningStats accelerationStats;
+
+  std::map<Adafruit_BNO055::adafruit_vector_type_t, sensors_event_t> eventMap;
   
+  inline void cacheEventType(Adafruit_BNO055::adafruit_vector_type_t type) {
+    sensors_event_t event;
+    bno.getEvent(&event, type);
+    eventMap[type] = event;
+  }
+
 public:
   Adafruit_BNO055 bno;
   MotionManager() : accelerationStats(900) {
@@ -73,13 +81,14 @@ public:
     }
   }
 
-  void loop() {
-    sensors_event_t accel;
-    bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-
-    accelerationStats.push(accel.acceleration.x);
+  sensors_event_t event(Adafruit_BNO055::adafruit_vector_type_t type) {
+    if (eventMap.find(type) == eventMap.end()) {
+      // memoize for this frame
+      cacheEventType(type);
+    }
+    return eventMap[type];
   }
-  
+
   float bouncyEnergy() {
     return accelerationStats.variance();
   }
@@ -87,13 +96,15 @@ public:
   // the jankiest activity classifier evar
   unsigned long jumpClock = 0;
 
-  void getEvent(sensors_event_t *event) {
-    bno.getEvent(event);
-    
-    sensors_event_t linear_accel;
-    sensors_event_t accel;
-    bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
+  void loop() {
+    eventMap.clear(); // new frame new events
+    twirlCached = false;
+
+    sensors_event_t accel = event(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    accelerationStats.push(accel.acceleration.x);
+
+    sensors_event_t linear_accel = event(Adafruit_BNO055::VECTOR_LINEARACCEL);
+
     // logf("accel, lin_accel: (%0.3f, %0.3f)", accel.acceleration.x, linear_accel.acceleration.x);
 
     // a "jump" is a short interval between linear_accel.acceleration.x moving high and then low, indicating the liftoff and then land
@@ -140,24 +151,30 @@ public:
 private:
   float twirlVelocityAccum;
   float prevXOrientation;
+  bool twirlCached = false;
 public:
   float twirlVelocity(int samples=10, float *outOrientation=NULL) {
-    // FIXME: rework the twirl accumulator so this can be called multiple times in a single frame without smashing the accumulator, since MotionManager is a singleton.
     float orientation;
 
 #if kTestTwirlBPM != 0
     orientation = (beatsin16(kTestTwirlBPM, 0, 1000) - 500) / 2;
 #else
-    sensors_event_t event;
-    getEvent(&event);
-    orientation = event.orientation.x;
+    sensors_event_t euler = event(Adafruit_BNO055::VECTOR_EULER);
+    orientation = euler.orientation.x;
 #endif
-    twirlVelocityAccum = (samples * twirlVelocityAccum + MOD_DISTANCE(prevXOrientation, orientation, 360)) / (samples + 1);
-    prevXOrientation = orientation;
 
     if (outOrientation) {
       *outOrientation = orientation;
     }
+
+    // repeated calls in the same frame should not update twirl accum
+    if (twirlCached) {
+      return twirlVelocityAccum;
+    }
+    twirlCached = true;
+
+    twirlVelocityAccum = (samples * twirlVelocityAccum + MOD_DISTANCE(prevXOrientation, orientation, 360)) / (samples + 1);
+    prevXOrientation = orientation;
 
     return twirlVelocityAccum;
   }

@@ -355,8 +355,7 @@ public:
       }
     }
 
-    sensors_event_t event;
-    motionManager.getEvent(&event);
+    sensors_event_t event = motionManager.event(Adafruit_BNO055::VECTOR_EULER);
     float xOffset = event.orientation.x * TOTAL_WIDTH / 360;
     ctx.shift_buffer(-xOffset,0);
     
@@ -657,8 +656,7 @@ public:
     ctx.leds.fill_solid(CRGB::Black);
     circleBuffer.leds.fill_solid(CRGB::Black);
 
-    sensors_event_t event;
-    motionManager.getEvent(&event);
+    sensors_event_t event = motionManager.event(Adafruit_BNO055::VECTOR_EULER);
     float xOffset = (event.magnetic.x + 90) * circleBuffer.width / 360;
     // motionManager.printStatus();
 
@@ -869,8 +867,7 @@ class RainbowMotion : public Pattern {
 
   void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
-    sensors_event_t event; 
-    motionManager.getEvent(&event);
+    sensors_event_t event = motionManager.event(Adafruit_BNO055::VECTOR_EULER);
     
     logf("X: %0.4f, Y: %0.4f, Z: %0.4f", event.orientation.x, event.orientation.y, event.orientation.z);
 //    Serial.print("X: ");
@@ -936,10 +933,8 @@ public:
   void update() {
     CRGBArray<NUM_LEDS> leds = ctx.leds;
     dimension_t x, y;
-    sensors_event_t accel;
-    sensors_event_t linear_accel;
-    motionManager.bno.getEvent(&accel, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    motionManager.bno.getEvent(&linear_accel, Adafruit_BNO055::VECTOR_LINEARACCEL);
+    sensors_event_t accel = motionManager.event(Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    sensors_event_t linear_accel = motionManager.event(Adafruit_BNO055::VECTOR_LINEARACCEL);
     float jerkFactor = 2.0;
 
     // while standing upright:
@@ -1149,8 +1144,7 @@ public:
       extraGain += 0.001 / (extraGain > 1 ? extraGain * extraGain : 1.0);
     }
 
-    sensors_event_t event;
-    motionManager.getEvent(&event);
+    sensors_event_t event = motionManager.event(Adafruit_BNO055::VECTOR_EULER);
     float xOffset = event.orientation.x * TOTAL_WIDTH / 360;
     ctx.shift_buffer(-xOffset,0);
   }

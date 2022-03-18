@@ -656,8 +656,10 @@ public:
     ctx.leds.fill_solid(CRGB::Black);
     circleBuffer.leds.fill_solid(CRGB::Black);
 
+    // EULER rather than MAGNETIC because the units are different. As long as the sensor is initialized in 9dof mode this will yield correct magnetic readings
     sensors_event_t event = motionManager.event(Adafruit_BNO055::VECTOR_EULER);
-    float xOffset = (event.magnetic.x + 90) * circleBuffer.width / 360;
+    int fudge = 120; // manual rough alignment
+    float xOffset = (event.magnetic.x + fudge) * circleBuffer.width / 360;
     // motionManager.printStatus();
 
     uint8_t systemCalibration = 0;

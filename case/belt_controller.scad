@@ -1,6 +1,6 @@
 epsilon = 0.001;
 
-$fs = 0.05; // min angle for curved shapes
+$fs = 0.2; // min angle for curved shapes
 $fa = 3; // min segment/fragment size
 
 RAD = 180 / PI;
@@ -112,14 +112,14 @@ teensy_usb_position = [134.6 /*pcb*/, start_position.y-shell_thickness, 5.4-teen
 
 dial_1_position = [149.225 + 10.16, 83.185, 0] /*pcb*/ - start_position;
 dial_2_position = [149.225 + 10.16, 98.298, 0] /*pcb*/ - start_position;
-dial_radius = 7.2 /*measured*/ + 0.4 /*tolerance*/;
+dial_radius = 7.2 /*measured*/ + 0.5 /*tolerance*/;
 
 wire_cutout_position_y = 132.75 /*pcb*/ - start_position.y;
 wire_cutout_radius = 2.75 /*pcb*/ + 0.4 /*extra for messy cables*/;
 
 button_column_radius = 2.2;
 button_column_height = top_case_height - (6.0 /*measured*/ - board_thickness);
-button_column_extra_height = 3; // I'm printing the top case upside down so this is fine, just need to flip it in the slicer
+button_column_extra_height = 2; // I'm printing the top case upside down so this is fine, just need to flip it in the slicer
 button_position = [153.3, 72.4, 0] /*pcb*/ - start_position;
 
 board_corner_radius = 2.54 /*pcb*/;
@@ -198,8 +198,8 @@ translate([board_x_size*-1.1, 0, 0]) union() {
         translate([0,0,button_column_height/2]) cylinder(h=button_column_height, r=button_column_radius, center=true);
         if (button_column_extra_height) 
             cylinder(h=2*button_column_extra_height, r1=button_column_radius + button_column_extra_height/4, r2=1.5, center=true);
-        translate([-0.1,0.4,0]) spiral(1, 1.2, 1, 0.4);
-        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.2, 0.96, 0.4);
+        translate([-0.1,0.4,0]) spiral(1, 1.3, 1, 0.5);
+        translate([0.1,-0.4,0]) rotate(180, [0,0,1]) spiral(1, 1.3, 0.96, 0.5);
     }
 }
 
@@ -217,7 +217,6 @@ translate([board_x_size*0.0, 0, 0]) difference() {
         // screws
         screw_holes(shell_thickness + epsilon);
         translate([0,0,shell_thickness]) screw_bump(bottom_case_height - shell_thickness);
-
     }
 }
  

@@ -636,6 +636,7 @@ public:
 
 class Compass : public WrappedBufferPattern, public PaletteRotation<CRGBPalette32> {
   Glyph *cardinals[4];
+  unsigned long lastValidCalibratedTime = 0;
 public:
   Compass() : PaletteRotation(minBrightness=10) {
     std::map<char,CRGB> colormap;
@@ -664,7 +665,7 @@ public:
 
     uint8_t systemCalibration = 0;
     motionManager.bno.getCalibration(&systemCalibration, NULL, NULL, NULL);
-    if (systemCalibration == 0) {
+    if (systemCalibration == 0 && millis() - lastValidCalibratedTime > 50000) {
       int dotSpacing = 8;
       for (int i = 0; i < ctx.width / dotSpacing; ++i) {
         ctx.point(mod_wrap(i*dotSpacing + event.orientation.x, ctx.width), 3, CRGB::White);
@@ -679,6 +680,7 @@ public:
       circleBuffer.shift_buffer(-xOffset,0);
 
       WrappedBufferPattern::update();
+      lastValidCalibratedTime = millis();
     }
   }
 

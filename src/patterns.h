@@ -517,7 +517,7 @@ public:
     float px = x - theta * TOTAL_WIDTH / 360;
     float thetarad = theta * M_PI/180;
 
-    float r = 2+fabsf(dtheta);
+    float r = 2 + 0.8 * fabsf(dtheta);
 
     float midY = TOTAL_HEIGHT/2-0.5;
     // heading is leaning forward and back, -180, 180

@@ -969,17 +969,16 @@ public:
     // logf("ACCEL (%0.2f, %0.2f, %0.2f), LINACCEL (%0.2f, %0.2f, %0.2f)", accel.acceleration.x,accel.acceleration.y,accel.acceleration.z,
     //                                                                     linear_accel.acceleration.x, linear_accel.acceleration.y, linear_accel.acceleration.z);
 
-    // board x impacted by motion z (through board) and motion y (horizontal along board). 
-    //   disinclude accel.y in favor of linear_accel.y  because we want to capture shifting and twirling, but wouldn't know what to do with wrapped panels if gravity is to the side
-    // board y impacted by motion x (vertical along board). add jerk factor in order to make pixels bounce
+    // dust x is z (through-board) gravity to pour front-back with tilt, plus y (horizontal) linear to capture motion during twirls
+    // dust y is x (vertical) gravity + x linear to make pixels bounce
 
     pixelDust[0]->iterate(
-                  -1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z + zcorrect[0] - jerkFactor * linear_accel.acceleration.y),
+                  -1 * (accel.acceleration.z - linear_accel.acceleration.z + zcorrect[0] + jerkFactor * linear_accel.acceleration.y),
                   1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
                   0);
     
     pixelDust[1]->iterate(
-                  1 * (accel.acceleration.z + jerkFactor * linear_accel.acceleration.z + zcorrect[1] - jerkFactor * linear_accel.acceleration.y),
+                  1 * (accel.acceleration.z - linear_accel.acceleration.z + zcorrect[1] + jerkFactor * linear_accel.acceleration.y),
                   1 * (accel.acceleration.x + jerkFactor * linear_accel.acceleration.x), 
                   0);
 

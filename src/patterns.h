@@ -467,9 +467,12 @@ public:
 
 class SpikeSpin : public MotionBlobs {
 public:
-  SpikeSpin() : MotionBlobs(8) {
-    flags = patternFlagNone; // needs polish
+  SpikeSpin() : MotionBlobs(8) { }
+  
+  static PatternFlags patternFlags() {
+    return patternFlagNone; // needs polish
   }
+
   void draw(int x, float theta, float dtheta) {
     // vertical bar while still, morphs in 2D to a horizontal bar, passing through larger shapes matched to rotation velocity
     // while horizontal, forms a complete 2px thick line over entire belt that tracks 2 cycles of a palettes
@@ -963,7 +966,7 @@ public:
           zbalance += (x > 3*PANEL_WIDTH/2 ? 1 : -1);
         }
       }
-      zcorrect[p] = 6.0 * zbalance / numParticles;
+      zcorrect[p] = 3.0 * zbalance / numParticles;
     }
 
     // logf("ACCEL (%0.2f, %0.2f, %0.2f), LINACCEL (%0.2f, %0.2f, %0.2f)", accel.acceleration.x,accel.acceleration.y,accel.acceleration.z,
